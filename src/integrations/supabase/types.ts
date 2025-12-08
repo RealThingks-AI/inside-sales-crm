@@ -155,7 +155,7 @@ export type Database = {
           business_value: string | null
           closing: string | null
           created_at: string | null
-          created_by: string
+          created_by: string | null
           currency_type: string | null
           current_status: string | null
           customer_challenges: string | null
@@ -203,7 +203,7 @@ export type Database = {
           business_value?: string | null
           closing?: string | null
           created_at?: string | null
-          created_by: string
+          created_by?: string | null
           currency_type?: string | null
           current_status?: string | null
           customer_challenges?: string | null
@@ -251,7 +251,7 @@ export type Database = {
           business_value?: string | null
           closing?: string | null
           created_at?: string | null
-          created_by?: string
+          created_by?: string | null
           currency_type?: string | null
           current_status?: string | null
           customer_challenges?: string | null
