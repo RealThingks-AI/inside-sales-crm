@@ -1,4 +1,3 @@
-
 import { 
   Home, 
   Users, 
@@ -21,6 +20,16 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
 const menuItems = [
   { title: "Dashboard", url: "/", icon: Home },
@@ -38,6 +47,7 @@ interface AppSidebarProps {
 
 export function AppSidebar({ isFixed = false, isOpen, onToggle }: AppSidebarProps) {
   const [isPinned, setIsPinned] = useState(false);
+  const [showSignOutDialog, setShowSignOutDialog] = useState(false);
   const location = useLocation();
   const navigate = useNavigate();
   const { user, signOut } = useAuth();
@@ -54,8 +64,12 @@ export function AppSidebar({ isFixed = false, isOpen, onToggle }: AppSidebarProp
     return currentPath.startsWith(path);
   };
 
-  const handleSignOut = async () => {
-    console.log('Sign out clicked');
+  const handleSignOutClick = () => {
+    setShowSignOutDialog(true);
+  };
+
+  const handleSignOutConfirm = async () => {
+    setShowSignOutDialog(false);
     await signOut();
   };
 
@@ -287,7 +301,7 @@ export function AppSidebar({ isFixed = false, isOpen, onToggle }: AppSidebarProp
           <Tooltip>
             <TooltipTrigger asChild>
               <button
-                onClick={handleSignOut}
+                onClick={handleSignOutClick}
                 className="flex items-center h-10 w-full rounded-lg transition-colors text-sidebar-foreground/70 hover:text-sidebar-primary hover:bg-sidebar-accent/50 font-medium"
               >
                 <div className="w-10 h-10 flex items-center justify-center flex-shrink-0">
@@ -312,6 +326,22 @@ export function AppSidebar({ isFixed = false, isOpen, onToggle }: AppSidebarProp
           </Tooltip>
         </div>
       </div>
+
+      {/* Sign Out Confirmation Dialog */}
+      <AlertDialog open={showSignOutDialog} onOpenChange={setShowSignOutDialog}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Sign Out</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to sign out? You will need to log in again to access your account.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={handleSignOutConfirm}>Sign Out</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }
