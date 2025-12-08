@@ -417,7 +417,44 @@ serve(async (req) => {
       console.log('Admin deleting user:', userId);
 
       try {
-        // Delete the auth user (cascade will handle related records)
+        // First, clean up all references to this user in public tables
+        // Set NULL for columns that reference auth.users with ON DELETE SET NULL
+        console.log('Cleaning up user references before deletion...');
+        
+        // Clean up deals table
+        await supabaseAdmin.from('deals').update({ created_by: null }).eq('created_by', userId);
+        await supabaseAdmin.from('deals').update({ modified_by: null }).eq('modified_by', userId);
+        
+        // Clean up leads table
+        await supabaseAdmin.from('leads').update({ created_by: null }).eq('created_by', userId);
+        await supabaseAdmin.from('leads').update({ modified_by: null }).eq('modified_by', userId);
+        await supabaseAdmin.from('leads').update({ contact_owner: null }).eq('contact_owner', userId);
+        
+        // Clean up contacts table
+        await supabaseAdmin.from('contacts').update({ created_by: null }).eq('created_by', userId);
+        await supabaseAdmin.from('contacts').update({ modified_by: null }).eq('modified_by', userId);
+        await supabaseAdmin.from('contacts').update({ contact_owner: null }).eq('contact_owner', userId);
+        
+        // Clean up deal_action_items table
+        await supabaseAdmin.from('deal_action_items').update({ created_by: null }).eq('created_by', userId);
+        await supabaseAdmin.from('deal_action_items').update({ assigned_to: null }).eq('assigned_to', userId);
+        
+        // Clean up lead_action_items table
+        await supabaseAdmin.from('lead_action_items').update({ created_by: null }).eq('created_by', userId);
+        await supabaseAdmin.from('lead_action_items').update({ assigned_to: null }).eq('assigned_to', userId);
+        
+        // Clean up user_roles assigned_by
+        await supabaseAdmin.from('user_roles').update({ assigned_by: null }).eq('assigned_by', userId);
+        
+        // Clean up security_audit_log
+        await supabaseAdmin.from('security_audit_log').update({ user_id: null }).eq('user_id', userId);
+        
+        // Clean up yearly_revenue_targets
+        await supabaseAdmin.from('yearly_revenue_targets').update({ created_by: null }).eq('created_by', userId);
+        
+        console.log('User references cleaned up, now deleting auth user...');
+
+        // Delete the auth user (cascade will handle remaining records like profiles, user_roles, etc.)
         const { error: authDeleteError } = await supabaseAdmin.auth.admin.deleteUser(userId);
 
         if (authDeleteError) {
