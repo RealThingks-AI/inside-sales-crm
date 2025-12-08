@@ -1,1 +1,16 @@
-project_id = "nreslricievaamrwfrlx"
+project_id = "narvjcteixgjclvjvlbn"
+
+[functions.user-admin]
+verify_jwt = false
+
+[functions.create-teams-meeting]
+verify_jwt = false
+
+[functions.fetch-user-display-names]
+verify_jwt = false
+
+[functions.get-user-names]
+verify_jwt = false
+
+[functions.security-monitor]
+verify_jwt = false
