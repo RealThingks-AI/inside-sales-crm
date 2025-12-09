@@ -57,49 +57,12 @@ async function getAccessToken(): Promise<string> {
   return data.access_token;
 }
 
-async function createOnlineMeeting(accessToken: string, meetingRequest: MeetingRequest): Promise<any> {
+async function createOnlineMeeting(accessToken: string, meetingRequest: MeetingRequest, organizerEmail: string): Promise<any> {
   console.log('Creating Teams meeting via Microsoft Graph API...');
   
-  // Format attendees for Graph API
-  const attendees = meetingRequest.attendees.map(attendee => ({
-    emailAddress: {
-      address: attendee.email,
-      name: attendee.name
-    },
-    type: 'required'
-  }));
-
-  // Create online meeting using Microsoft Graph API
-  // Using /me/onlineMeetings requires delegated permissions
-  // For app-only, we need to use /users/{userId}/onlineMeetings
-  // Alternative: Use application permissions with a specific user ID
-  
-  const meetingBody = {
-    startDateTime: meetingRequest.startTime,
-    endDateTime: meetingRequest.endTime,
-    subject: meetingRequest.subject,
-    participants: {
-      attendees: attendees.map(a => ({
-        upn: a.emailAddress.address,
-        role: 'attendee'
-      }))
-    },
-    lobbyBypassSettings: {
-      scope: 'everyone',
-      isDialInBypassEnabled: true
-    },
-    allowedPresenters: 'everyone'
-  };
-
-  console.log('Meeting request body:', JSON.stringify(meetingBody, null, 2));
-
-  // For app-only permissions, we need a user ID to create meetings on behalf of
-  // This requires OnlineMeetings.ReadWrite.All application permission
-  // and the user must have a Teams license
-  
-  // First, try to get the first user with Teams license
-  const usersResponse = await fetch(
-    'https://graph.microsoft.com/v1.0/users?$select=id,displayName,mail,userPrincipalName&$top=1',
+  // First, get the user by email to get their ID
+  const userResponse = await fetch(
+    `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(organizerEmail)}`,
     {
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -108,20 +71,36 @@ async function createOnlineMeeting(accessToken: string, meetingRequest: MeetingR
     }
   );
 
-  if (!usersResponse.ok) {
-    const errorData = await usersResponse.json();
-    console.error('Failed to fetch users:', errorData);
-    throw new Error('Failed to fetch users from Microsoft Graph');
+  if (!userResponse.ok) {
+    const errorData = await userResponse.json();
+    console.error('Failed to fetch user by email:', errorData);
+    
+    // If we can't get the user, the app might not have User.Read.All permission
+    // In this case, we need the user to be specified in the Azure AD app
+    throw new Error(
+      `Cannot find user in Azure AD: ${organizerEmail}. ` +
+      `Please ensure the Azure App has User.Read.All permission with admin consent, ` +
+      `or the user exists in your Azure AD tenant.`
+    );
   }
 
-  const usersData = await usersResponse.json();
-  
-  if (!usersData.value || usersData.value.length === 0) {
-    throw new Error('No users found in the Azure AD tenant');
-  }
+  const userData = await userResponse.json();
+  const organizerUserId = userData.id;
+  console.log('Found organizer user ID:', organizerUserId);
 
-  const organizerUserId = usersData.value[0].id;
-  console.log('Using organizer user ID:', organizerUserId);
+  // Create meeting body for online meeting
+  const meetingBody = {
+    startDateTime: meetingRequest.startTime,
+    endDateTime: meetingRequest.endTime,
+    subject: meetingRequest.subject,
+    lobbyBypassSettings: {
+      scope: 'everyone',
+      isDialInBypassEnabled: true
+    },
+    allowedPresenters: 'everyone'
+  };
+
+  console.log('Meeting request body:', JSON.stringify(meetingBody, null, 2));
 
   // Create the online meeting
   const meetingResponse = await fetch(
@@ -140,6 +119,21 @@ async function createOnlineMeeting(accessToken: string, meetingRequest: MeetingR
 
   if (!meetingResponse.ok) {
     console.error('Graph API error creating meeting:', meetingData);
+    
+    // Provide helpful error messages based on common issues
+    if (meetingData.error?.code === 'AuthenticationError') {
+      throw new Error(
+        'Authentication error with Microsoft Graph. ' +
+        'Please ensure the Azure App has OnlineMeetings.ReadWrite.All permission with admin consent.'
+      );
+    }
+    
+    if (meetingData.error?.code === 'ResourceNotFound') {
+      throw new Error(
+        `User ${organizerEmail} does not have a Teams license or is not enabled for online meetings.`
+      );
+    }
+    
     throw new Error(meetingData.error?.message || 'Failed to create Teams meeting');
   }
 
@@ -207,8 +201,12 @@ serve(async (req) => {
     // Get Azure AD access token
     const accessToken = await getAccessToken();
 
+    // Use the authenticated user's email as the organizer
+    // The user must exist in the Azure AD tenant
+    const organizerEmail = user.email!;
+
     // Create the Teams meeting
-    const meeting = await createOnlineMeeting(accessToken, { subject, attendees, startTime, endTime });
+    const meeting = await createOnlineMeeting(accessToken, { subject, attendees, startTime, endTime }, organizerEmail);
 
     // Log the meeting creation for security audit
     const adminClient = createClient(
