@@ -3,6 +3,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useCRUDAudit } from "@/hooks/useCRUDAudit";
 import { useUserDisplayNames } from "@/hooks/useUserDisplayNames";
+import { useUserRole } from "@/hooks/useUserRole";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -16,20 +17,21 @@ import { LeadStatusFilter } from "./LeadStatusFilter";
 import { ConvertToDealModal } from "./ConvertToDealModal";
 import { LeadActionItemsModal } from "./LeadActionItemsModal";
 import { LeadDeleteConfirmDialog } from "./LeadDeleteConfirmDialog";
+import { AccountViewModal } from "./AccountViewModal";
 
 interface Lead {
   id: string;
   lead_name: string;
   company_name?: string;
+  account_company_name?: string;
+  account_id?: string;
   position?: string;
   email?: string;
   phone_no?: string;
-  country?: string;
   contact_owner?: string;
   created_time?: string;
   modified_time?: string;
   lead_status?: string;
-  industry?: string;
   contact_source?: string;
   linkedin?: string;
   website?: string;
@@ -44,7 +46,7 @@ const defaultColumns: LeadColumnConfig[] = [{
   visible: true,
   order: 0
 }, {
-  field: 'company_name',
+  field: 'account_company_name',
   label: 'Company Name',
   visible: true,
   order: 1
@@ -64,30 +66,20 @@ const defaultColumns: LeadColumnConfig[] = [{
   visible: true,
   order: 4
 }, {
-  field: 'country',
-  label: 'Region',
-  visible: true,
-  order: 5
-}, {
   field: 'contact_owner',
   label: 'Lead Owner',
   visible: true,
-  order: 6
+  order: 5
 }, {
   field: 'lead_status',
   label: 'Lead Status',
   visible: true,
-  order: 7
-}, {
-  field: 'industry',
-  label: 'Industry',
-  visible: true,
-  order: 8
+  order: 6
 }, {
   field: 'contact_source',
   label: 'Source',
   visible: true,
-  order: 9
+  order: 7
 }];
 
 interface LeadTableProps {
@@ -113,6 +105,7 @@ const LeadTable = ({
   const {
     logDelete
   } = useCRUDAudit();
+  const { userRole } = useUserRole();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [filteredLeads, setFilteredLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
@@ -130,6 +123,8 @@ const LeadTable = ({
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [showActionItemsModal, setShowActionItemsModal] = useState(false);
   const [selectedLeadForActions, setSelectedLeadForActions] = useState<Lead | null>(null);
+  const [viewAccountId, setViewAccountId] = useState<string | null>(null);
+  const [accountViewOpen, setAccountViewOpen] = useState(false);
 
   useEffect(() => {
     fetchLeads();
@@ -176,11 +171,23 @@ const LeadTable = ({
       const {
         data,
         error
-      } = await supabase.from('leads').select('*').order('created_time', {
+      } = await supabase.from('leads').select(`
+        *,
+        accounts:account_id (
+          company_name
+        )
+      `).order('created_time', {
         ascending: false
       });
       if (error) throw error;
-      setLeads(data || []);
+      
+      // Transform data to include account_company_name
+      const transformedData = (data || []).map(lead => ({
+        ...lead,
+        account_company_name: lead.accounts?.company_name || lead.company_name || null
+      }));
+      
+      setLeads(transformedData);
     } catch (error) {
       toast({
         title: "Error",
@@ -402,9 +409,20 @@ const LeadTable = ({
                   setShowModal(true);
                 }} className="text-primary hover:underline font-medium text-left truncate block w-full">
                             {lead[column.field as keyof Lead] || '-'}
+                          </button> : column.field === 'account_company_name' ? <button 
+                            onClick={() => {
+                              if (lead.account_id) {
+                                setViewAccountId(lead.account_id);
+                                setAccountViewOpen(true);
+                              }
+                            }} 
+                            className="text-primary hover:underline font-medium text-left truncate block w-full"
+                            title={lead.account_company_name || undefined}
+                          >
+                            {lead.account_company_name || '-'}
                           </button> : column.field === 'contact_owner' ? <span className="truncate block">
                             {lead.created_by ? displayNames[lead.created_by] || "Loading..." : '-'}
-                          </span> : column.field === 'lead_status' && lead.lead_status ? <Badge variant={lead.lead_status === 'New' ? 'secondary' : lead.lead_status === 'Contacted' ? 'default' : lead.lead_status === 'Converted' ? 'outline' : 'outline'} className="whitespace-nowrap">
+                          </span> : column.field === 'lead_status' && lead.lead_status ? <Badge variant={lead.lead_status === 'New' ? 'secondary' : lead.lead_status === 'Attempted' ? 'default' : lead.lead_status === 'Follow-up' ? 'default' : lead.lead_status === 'Qualified' ? 'outline' : lead.lead_status === 'Disqualified' ? 'destructive' : 'outline'} className="whitespace-nowrap">
                             {lead.lead_status}
                           </Badge> : <span className="truncate block" title={lead[column.field as keyof Lead]?.toString() || '-'}>
                             {lead[column.field as keyof Lead] || '-'}
@@ -425,9 +443,11 @@ const LeadTable = ({
                   }} title="Delete lead" className="h-8 w-8 p-0">
                           <Trash2 className="w-4 h-4" />
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={() => handleConvertToDeal(lead)} disabled={lead.lead_status === 'Converted'} title="Convert to deal" className="h-8 w-8 p-0">
-                          <RefreshCw className="w-4 h-4" />
-                        </Button>
+                        {userRole !== 'user' && (
+                          <Button variant="ghost" size="sm" onClick={() => handleConvertToDeal(lead)} disabled={lead.lead_status === 'Converted'} title="Convert to deal" className="h-8 w-8 p-0">
+                            <RefreshCw className="w-4 h-4" />
+                          </Button>
+                        )}
                         <Button variant="ghost" size="sm" onClick={() => handleActionItems(lead)} title="Action items" className="h-8 w-8 p-0">
                           <ListTodo className="w-4 h-4" />
                         </Button>
@@ -475,6 +495,12 @@ const LeadTable = ({
       setShowDeleteDialog(false);
       setLeadToDelete(null);
     }} leadName={leadToDelete?.lead_name} />
+
+      <AccountViewModal 
+        open={accountViewOpen} 
+        onOpenChange={setAccountViewOpen} 
+        accountId={viewAccountId} 
+      />
     </div>;
 };
 

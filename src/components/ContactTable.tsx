@@ -14,6 +14,8 @@ interface Contact {
   id: string;
   contact_name: string;
   company_name?: string;
+  account_id?: string;
+  account_company_name?: string;
   position?: string;
   email?: string;
   phone_no?: string;
@@ -38,14 +40,12 @@ interface Contact {
 
 const defaultColumns: ContactColumnConfig[] = [
   { field: 'contact_name', label: 'Contact Name', visible: true, order: 0 },
-  { field: 'company_name', label: 'Company Name', visible: true, order: 1 },
+  { field: 'account_company_name', label: 'Company Account', visible: true, order: 1 },
   { field: 'position', label: 'Position', visible: true, order: 2 },
   { field: 'email', label: 'Email', visible: true, order: 3 },
-  { field: 'phone_no', label: 'Phone', visible: true, order: 4 },
-  { field: 'region', label: 'Region', visible: true, order: 5 },
+  { field: 'phone_no', label: 'Phone Number', visible: true, order: 4 },
+  { field: 'contact_source', label: 'Contact Source', visible: true, order: 5 },
   { field: 'contact_owner', label: 'Contact Owner', visible: true, order: 6 },
-  { field: 'industry', label: 'Industry', visible: true, order: 7 },
-  { field: 'contact_source', label: 'Source', visible: true, order: 8 },
 ];
 
 interface ContactTableProps {
@@ -91,16 +91,27 @@ export const ContactTable = ({
       
       const { data, error } = await supabase
         .from('contacts')
-        .select('*')
+        .select(`
+          *,
+          accounts:account_id (
+            company_name
+          )
+        `)
         .order('created_time', { ascending: false });
+      
+      // Transform data to include account_company_name
+      const transformedData = (data || []).map(contact => ({
+        ...contact,
+        account_company_name: contact.accounts?.company_name || contact.company_name || null
+      }));
 
       if (error) {
         console.error('ContactTable: Supabase error:', error);
         throw error;
       }
       
-      console.log('ContactTable: Successfully fetched contacts:', data?.length || 0);
-      setContacts(data || []);
+      console.log('ContactTable: Successfully fetched contacts:', transformedData?.length || 0);
+      setContacts(transformedData || []);
       
     } catch (error) {
       console.error('ContactTable: Error fetching contacts:', error);

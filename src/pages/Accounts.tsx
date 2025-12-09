@@ -1,45 +1,32 @@
-import LeadTable from "@/components/LeadTable";
+import AccountTable from "@/components/AccountTable";
 import { Button } from "@/components/ui/button";
 import { Settings, Plus, Trash2, MoreVertical, Upload, Download } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useState, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { useSimpleLeadsImportExport } from "@/hooks/useSimpleLeadsImportExport";
-import { useLeadDeletion } from "@/hooks/useLeadDeletion";
-import { LeadDeleteConfirmDialog } from "@/components/LeadDeleteConfirmDialog";
+import { useAccountsImportExport } from "@/hooks/useAccountsImportExport";
+import { AccountDeleteConfirmDialog } from "@/components/AccountDeleteConfirmDialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-const Leads = () => {
+const Accounts = () => {
   const {
     toast
   } = useToast();
   const [showColumnCustomizer, setShowColumnCustomizer] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  const [selectedLeads, setSelectedLeads] = useState<string[]>([]);
+  const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const {
     handleImport,
     handleExport,
     isImporting
-  } = useSimpleLeadsImportExport(() => {
+  } = useAccountsImportExport(() => {
     setRefreshTrigger(prev => prev + 1);
   });
-  const {
-    deleteLeads,
-    isDeleting
-  } = useLeadDeletion();
-  const handleBulkDelete = async (deleteLinkedRecords: boolean = true) => {
-    if (selectedLeads.length === 0) return;
-    const result = await deleteLeads(selectedLeads, deleteLinkedRecords);
-    if (result.success) {
-      setSelectedLeads([]);
-      setRefreshTrigger(prev => prev + 1);
-      setShowBulkDeleteDialog(false);
-    }
-  };
   const handleBulkDeleteClick = () => {
-    if (selectedLeads.length === 0) return;
+    if (selectedAccounts.length === 0) return;
     setShowBulkDeleteDialog(true);
   };
   const handleFileSelect = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -53,7 +40,6 @@ const Leads = () => {
         variant: "destructive"
       });
     }
-    // Reset the input value so the same file can be selected again
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -64,13 +50,13 @@ const Leads = () => {
         <div className="px-6 h-16 flex items-center border-b w-full">
           <div className="flex items-center justify-between w-full">
             <div className="min-w-0 flex-1">
-              <h1 className="text-2xl font-bold text-foreground">Leads</h1>
+              <h1 className="text-2xl font-bold text-foreground">Accounts</h1>
             </div>
             <div className="flex items-center gap-2">
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
-                
+                <span></span>
               </TooltipTrigger>
               <TooltipContent>
                 <p>Columns</p>
@@ -78,7 +64,7 @@ const Leads = () => {
             </Tooltip>
           </TooltipProvider>
           
-          {selectedLeads.length > 0 && <TooltipProvider>
+          {selectedAccounts.length > 0 && <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button variant="outline" size="icon" onClick={handleBulkDeleteClick} disabled={isDeleting}>
@@ -86,7 +72,7 @@ const Leads = () => {
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>
-                  <p>{isDeleting ? 'Deleting...' : `Delete Selected (${selectedLeads.length})`}</p>
+                  <p>{isDeleting ? 'Deleting...' : `Delete Selected (${selectedAccounts.length})`}</p>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>}
@@ -110,9 +96,9 @@ const Leads = () => {
                 <Download className="w-4 h-4 mr-2" />
                 Export CSV
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={handleBulkDeleteClick} disabled={selectedLeads.length === 0 || isDeleting} className="text-destructive focus:text-destructive">
+              <DropdownMenuItem onClick={handleBulkDeleteClick} disabled={selectedAccounts.length === 0 || isDeleting} className="text-destructive focus:text-destructive">
                 <Trash2 className="w-4 h-4 mr-2" />
-                {isDeleting ? 'Deleting...' : `Delete Selected (${selectedLeads.length})`}
+                {isDeleting ? 'Deleting...' : `Delete Selected (${selectedAccounts.length})`}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -125,7 +111,7 @@ const Leads = () => {
                 </Button>
               </TooltipTrigger>
               <TooltipContent>
-                <p>Add Lead</p>
+                <p>Add Account</p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
@@ -141,11 +127,19 @@ const Leads = () => {
 
       {/* Main Content Area */}
       <div className="flex-1 min-h-0 overflow-auto p-6">
-        <LeadTable showColumnCustomizer={showColumnCustomizer} setShowColumnCustomizer={setShowColumnCustomizer} showModal={showModal} setShowModal={setShowModal} selectedLeads={selectedLeads} setSelectedLeads={setSelectedLeads} key={refreshTrigger} />
+        <AccountTable showColumnCustomizer={showColumnCustomizer} setShowColumnCustomizer={setShowColumnCustomizer} showModal={showModal} setShowModal={setShowModal} selectedAccounts={selectedAccounts} setSelectedAccounts={setSelectedAccounts} key={refreshTrigger} onBulkDeleteComplete={() => {
+        setSelectedAccounts([]);
+        setRefreshTrigger(prev => prev + 1);
+        setShowBulkDeleteDialog(false);
+      }} />
       </div>
 
       {/* Bulk Delete Confirmation Dialog */}
-      <LeadDeleteConfirmDialog open={showBulkDeleteDialog} onConfirm={handleBulkDelete} onCancel={() => setShowBulkDeleteDialog(false)} isMultiple={true} count={selectedLeads.length} />
+      <AccountDeleteConfirmDialog open={showBulkDeleteDialog} onConfirm={async () => {
+      setIsDeleting(true);
+      setShowBulkDeleteDialog(false);
+      setIsDeleting(false);
+    }} onCancel={() => setShowBulkDeleteDialog(false)} isMultiple={true} count={selectedAccounts.length} />
     </div>;
 };
-export default Leads;
+export default Accounts;

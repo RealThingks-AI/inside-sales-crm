@@ -15,8 +15,10 @@ export const LeadStatusFilter = ({ value, onValueChange }: LeadStatusFilterProps
       <SelectContent>
         <SelectItem value="all">All Statuses</SelectItem>
         <SelectItem value="New">New</SelectItem>
-        <SelectItem value="Contacted">Contacted</SelectItem>
-        <SelectItem value="Converted">Converted</SelectItem>
+        <SelectItem value="Attempted">Attempted</SelectItem>
+        <SelectItem value="Follow-up">Follow-up</SelectItem>
+        <SelectItem value="Qualified">Qualified</SelectItem>
+        <SelectItem value="Disqualified">Disqualified</SelectItem>
       </SelectContent>
     </Select>
   );

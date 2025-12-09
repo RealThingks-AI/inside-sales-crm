@@ -13,16 +13,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Button } from "@/components/ui/button";
 
 const contactSchema = z.object({
-  contact_name: z.string().min(1, "Contact name is required"), // mandatory
-  company_name: z.string().optional(),
+  contact_name: z.string().min(1, "Contact name is required"),
+  account_id: z.string().optional(),
   position: z.string().optional(),
-  email: z.string().email("Invalid email address").optional().or(z.literal("")), // optional now
+  email: z.string().email("Invalid email address").optional().or(z.literal("")),
   phone_no: z.string().optional(),
   linkedin: z.string().url("Invalid LinkedIn URL").optional().or(z.literal("")),
-  website: z.string().url("Invalid website URL").optional().or(z.literal("")),
   contact_source: z.string().optional(),
-  industry: z.string().optional(),
-  region: z.string().optional(), // Changed from country to region
   description: z.string().optional(),
 });
 
@@ -31,6 +28,7 @@ type ContactFormData = z.infer<typeof contactSchema>;
 interface Contact {
   id: string;
   contact_name: string;
+  account_id?: string;
   company_name?: string;
   position?: string;
   email?: string;
@@ -41,6 +39,11 @@ interface Contact {
   industry?: string;
   region?: string;
   description?: string;
+}
+
+interface Account {
+  id: string;
+  company_name: string;
 }
 
 interface ContactModalProps {
@@ -59,69 +62,66 @@ const contactSources = [
   "Other"
 ];
 
-const industries = [
-  "Automotive",
-  "Technology",
-  "Manufacturing",
-  "Other"
-];
-
-const regions = [
-  "EU",
-  "US", 
-  "ASIA",
-  "Other"
-];
-
 export const ContactModal = ({ open, onOpenChange, contact, onSuccess }: ContactModalProps) => {
   const { toast } = useToast();
   const { logCreate, logUpdate } = useCRUDAudit();
   const [loading, setLoading] = useState(false);
+  const [accounts, setAccounts] = useState<Account[]>([]);
+  const [accountSearch, setAccountSearch] = useState("");
 
   const form = useForm<ContactFormData>({
     resolver: zodResolver(contactSchema),
     defaultValues: {
       contact_name: "",
-      company_name: "",
+      account_id: "",
       position: "",
       email: "",
       phone_no: "",
       linkedin: "",
-      website: "",
       contact_source: "",
-      industry: "Automotive",
-      region: "EU",
       description: "",
     },
   });
+
+  // Fetch accounts for dropdown
+  useEffect(() => {
+    const fetchAccounts = async () => {
+      const { data, error } = await supabase
+        .from('accounts')
+        .select('id, company_name')
+        .order('company_name', { ascending: true });
+      
+      if (!error && data) {
+        setAccounts(data);
+      }
+    };
+    
+    if (open) {
+      fetchAccounts();
+    }
+  }, [open]);
 
   useEffect(() => {
     if (contact) {
       form.reset({
         contact_name: contact.contact_name || "",
-        company_name: contact.company_name || "",
+        account_id: contact.account_id || "",
         position: contact.position || "",
         email: contact.email || "",
         phone_no: contact.phone_no || "",
         linkedin: contact.linkedin || "",
-        website: contact.website || "",
         contact_source: contact.contact_source || "",
-        industry: contact.industry || "Automotive",
-        region: contact.region || "EU",
         description: contact.description || "",
       });
     } else {
       form.reset({
         contact_name: "",
-        company_name: "",
+        account_id: "",
         position: "",
         email: "",
         phone_no: "",
         linkedin: "",
-        website: "",
         contact_source: "",
-        industry: "Automotive",
-        region: "EU",
         description: "",
       });
     }
@@ -141,17 +141,18 @@ export const ContactModal = ({ open, onOpenChange, contact, onSuccess }: Contact
         return;
       }
 
+      // Get company_name from selected account
+      const selectedAccount = accounts.find(acc => acc.id === data.account_id);
+      
       const contactData = {
         contact_name: data.contact_name,
-        company_name: data.company_name || null,
+        account_id: data.account_id || null,
+        company_name: selectedAccount?.company_name || null,
         position: data.position || null,
         email: data.email || null,
         phone_no: data.phone_no || null,
         linkedin: data.linkedin || null,
-        website: data.website || null,
         contact_source: data.contact_source || null,
-        industry: data.industry || null,
-        region: data.region || null,
         description: data.description || null,
         created_by: user.data.user.id,
         modified_by: user.data.user.id,
@@ -159,7 +160,7 @@ export const ContactModal = ({ open, onOpenChange, contact, onSuccess }: Contact
       };
 
       if (contact) {
-        const { data, error } = await supabase
+        const { error } = await supabase
           .from('contacts')
           .update({
             ...contactData,
@@ -171,7 +172,6 @@ export const ContactModal = ({ open, onOpenChange, contact, onSuccess }: Contact
 
         if (error) throw error;
 
-        // Log update operation
         await logUpdate('contacts', contact.id, contactData, contact);
 
         toast({
@@ -179,7 +179,7 @@ export const ContactModal = ({ open, onOpenChange, contact, onSuccess }: Contact
           description: "Contact updated successfully",
         });
       } else {
-        const { data, error } = await supabase
+        const { data: newContact, error } = await supabase
           .from('contacts')
           .insert(contactData)
           .select()
@@ -187,8 +187,7 @@ export const ContactModal = ({ open, onOpenChange, contact, onSuccess }: Contact
 
         if (error) throw error;
 
-        // Log create operation
-        await logCreate('contacts', data.id, contactData);
+        await logCreate('contacts', newContact.id, contactData);
 
         toast({
           title: "Success",
@@ -209,6 +208,10 @@ export const ContactModal = ({ open, onOpenChange, contact, onSuccess }: Contact
       setLoading(false);
     }
   };
+
+  const filteredAccounts = accounts.filter(account =>
+    account.company_name.toLowerCase().includes(accountSearch.toLowerCase())
+  );
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -238,13 +241,37 @@ export const ContactModal = ({ open, onOpenChange, contact, onSuccess }: Contact
 
               <FormField
                 control={form.control}
-                name="company_name"
+                name="account_id"
                 render={({ field }) => (
                   <FormItem>
-                    <FormLabel>Company Name</FormLabel>
-                    <FormControl>
-                      <Input placeholder="Company Name" {...field} />
-                    </FormControl>
+                    <FormLabel>Company Account</FormLabel>
+                    <Select onValueChange={field.onChange} value={field.value}>
+                      <FormControl>
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select account" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <div className="px-2 py-1">
+                          <Input
+                            placeholder="Search accounts..."
+                            value={accountSearch}
+                            onChange={(e) => setAccountSearch(e.target.value)}
+                            className="h-8"
+                          />
+                        </div>
+                        {filteredAccounts.map((account) => (
+                          <SelectItem key={account.id} value={account.id}>
+                            {account.company_name}
+                          </SelectItem>
+                        ))}
+                        {filteredAccounts.length === 0 && (
+                          <div className="px-2 py-4 text-sm text-muted-foreground text-center">
+                            No accounts found
+                          </div>
+                        )}
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}
@@ -308,20 +335,6 @@ export const ContactModal = ({ open, onOpenChange, contact, onSuccess }: Contact
 
               <FormField
                 control={form.control}
-                name="website"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Website</FormLabel>
-                    <FormControl>
-                      <Input placeholder="https://example.com" {...field} />
-                    </FormControl>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
                 name="contact_source"
                 render={({ field }) => (
                   <FormItem>
@@ -336,56 +349,6 @@ export const ContactModal = ({ open, onOpenChange, contact, onSuccess }: Contact
                         {contactSources.map((source) => (
                           <SelectItem key={source} value={source}>
                             {source}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="industry"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Industry</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select industry" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {industries.map((industry) => (
-                          <SelectItem key={industry} value={industry}>
-                            {industry}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                    <FormMessage />
-                  </FormItem>
-                )}
-              />
-
-              <FormField
-                control={form.control}
-                name="region"
-                render={({ field }) => (
-                  <FormItem>
-                    <FormLabel>Region</FormLabel>
-                    <Select onValueChange={field.onChange} value={field.value}>
-                      <FormControl>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select region" />
-                        </SelectTrigger>
-                      </FormControl>
-                      <SelectContent>
-                        {regions.map((region) => (
-                          <SelectItem key={region} value={region}>
-                            {region}
                           </SelectItem>
                         ))}
                       </SelectContent>

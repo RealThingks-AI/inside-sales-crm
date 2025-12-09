@@ -90,14 +90,15 @@ const Contacts = () => {
       });
     }
   };
-  return <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-foreground mb-2">Contacts</h1>
-          <p className="text-muted-foreground"> </p>
-        </div>
-        <div className="flex items-center gap-2">
+  return <div className="h-screen flex flex-col bg-background overflow-hidden">
+      {/* Fixed Header */}
+      <div className="flex-shrink-0 bg-background">
+        <div className="px-6 h-16 flex items-center border-b w-full">
+          <div className="flex items-center justify-between w-full">
+            <div className="min-w-0 flex-1">
+              <h1 className="text-2xl font-bold text-foreground">Contacts</h1>
+            </div>
+            <div className="flex items-center gap-2">
           <TooltipProvider>
             <Tooltip>
               <TooltipTrigger asChild>
@@ -147,14 +148,18 @@ const Contacts = () => {
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>
+            </div>
+          </div>
         </div>
       </div>
 
       {/* Hidden file input for CSV import */}
       <Input ref={fileInputRef} type="file" accept=".csv" onChange={handleImportCSV} className="hidden" disabled={isImporting} />
 
-      {/* Contact Table */}
-      <ContactTable showColumnCustomizer={showColumnCustomizer} setShowColumnCustomizer={setShowColumnCustomizer} showModal={showModal} setShowModal={setShowModal} selectedContacts={selectedContacts} setSelectedContacts={setSelectedContacts} refreshTrigger={refreshTrigger} />
+      {/* Main Content Area */}
+      <div className="flex-1 min-h-0 overflow-auto p-6">
+        <ContactTable showColumnCustomizer={showColumnCustomizer} setShowColumnCustomizer={setShowColumnCustomizer} showModal={showModal} setShowModal={setShowModal} selectedContacts={selectedContacts} setSelectedContacts={setSelectedContacts} refreshTrigger={refreshTrigger} />
+      </div>
     </div>;
 };
 export default Contacts;

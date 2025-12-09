@@ -58,48 +58,5 @@ export const DealActionsDropdown = ({
     input.click();
   };
 
-  return (
-    <DropdownMenu>
-      <DropdownMenuTrigger asChild>
-        <Button
-          variant="outline"
-          size="icon"
-          className="h-9 w-9"
-        >
-          <Settings className="w-4 h-4" />
-        </Button>
-      </DropdownMenuTrigger>
-      <DropdownMenuContent 
-        align="end" 
-        className="w-56 bg-popover border shadow-md rounded-md p-1"
-        sideOffset={4}
-      >
-        <DropdownMenuItem 
-          className="flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer hover:bg-accent hover:text-accent-foreground rounded-sm"
-          onClick={handleImportClick}
-        >
-          <Upload className="w-4 h-4" />
-          Import
-        </DropdownMenuItem>
-        
-        <DropdownMenuItem 
-          className="flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer hover:bg-accent hover:text-accent-foreground rounded-sm"
-          onClick={handleExportClick}
-        >
-          <Download className="w-4 h-4" />
-          Export {selectedDeals.length > 0 ? `(${selectedDeals.length} selected)` : 'All'}
-        </DropdownMenuItem>
-        
-        {showColumns && onColumnCustomize && (
-          <DropdownMenuItem 
-            className="flex items-center gap-2 px-2 py-1.5 text-sm cursor-pointer hover:bg-accent hover:text-accent-foreground rounded-sm"
-            onClick={onColumnCustomize}
-          >
-            <Columns className="w-4 h-4" />
-            Columns
-          </DropdownMenuItem>
-        )}
-      </DropdownMenuContent>
-    </DropdownMenu>
-  );
+  return null;
 };

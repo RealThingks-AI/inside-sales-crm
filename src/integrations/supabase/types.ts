@@ -14,8 +14,108 @@ export type Database = {
   }
   public: {
     Tables: {
+      accounts: {
+        Row: {
+          account_owner: string | null
+          company_name: string
+          company_type: string | null
+          country: string | null
+          created_at: string | null
+          created_by: string | null
+          id: string
+          industry: string | null
+          modified_by: string | null
+          notes: string | null
+          phone: string | null
+          region: string | null
+          status: string | null
+          tags: string[] | null
+          updated_at: string | null
+          website: string | null
+        }
+        Insert: {
+          account_owner?: string | null
+          company_name: string
+          company_type?: string | null
+          country?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          industry?: string | null
+          modified_by?: string | null
+          notes?: string | null
+          phone?: string | null
+          region?: string | null
+          status?: string | null
+          tags?: string[] | null
+          updated_at?: string | null
+          website?: string | null
+        }
+        Update: {
+          account_owner?: string | null
+          company_name?: string
+          company_type?: string | null
+          country?: string | null
+          created_at?: string | null
+          created_by?: string | null
+          id?: string
+          industry?: string | null
+          modified_by?: string | null
+          notes?: string | null
+          phone?: string | null
+          region?: string | null
+          status?: string | null
+          tags?: string[] | null
+          updated_at?: string | null
+          website?: string | null
+        }
+        Relationships: []
+      }
+      backups: {
+        Row: {
+          backup_type: string
+          created_at: string
+          created_by: string | null
+          file_name: string
+          file_path: string
+          id: string
+          manifest: Json | null
+          records_count: number | null
+          size_bytes: number | null
+          status: string
+          tables_count: number | null
+        }
+        Insert: {
+          backup_type?: string
+          created_at?: string
+          created_by?: string | null
+          file_name: string
+          file_path: string
+          id?: string
+          manifest?: Json | null
+          records_count?: number | null
+          size_bytes?: number | null
+          status?: string
+          tables_count?: number | null
+        }
+        Update: {
+          backup_type?: string
+          created_at?: string
+          created_by?: string | null
+          file_name?: string
+          file_path?: string
+          id?: string
+          manifest?: Json | null
+          records_count?: number | null
+          size_bytes?: number | null
+          status?: string
+          tables_count?: number | null
+        }
+        Relationships: []
+      }
       contacts: {
         Row: {
+          account_id: string | null
           company_name: string | null
           contact_name: string
           contact_owner: string | null
@@ -35,6 +135,7 @@ export type Database = {
           website: string | null
         }
         Insert: {
+          account_id?: string | null
           company_name?: string | null
           contact_name: string
           contact_owner?: string | null
@@ -54,6 +155,7 @@ export type Database = {
           website?: string | null
         }
         Update: {
+          account_id?: string | null
           company_name?: string | null
           contact_name?: string
           contact_owner?: string | null
@@ -72,7 +174,15 @@ export type Database = {
           region?: string | null
           website?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "contacts_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       dashboard_preferences: {
         Row: {
@@ -295,6 +405,36 @@ export type Database = {
         }
         Relationships: []
       }
+      email_templates: {
+        Row: {
+          body: string
+          created_at: string
+          created_by: string | null
+          id: string
+          name: string
+          subject: string
+          updated_at: string
+        }
+        Insert: {
+          body: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name: string
+          subject: string
+          updated_at?: string
+        }
+        Update: {
+          body?: string
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          name?: string
+          subject?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
       keep_alive: {
         Row: {
           "Able to read DB": string | null
@@ -351,6 +491,7 @@ export type Database = {
       }
       leads: {
         Row: {
+          account_id: string | null
           company_name: string | null
           contact_owner: string | null
           contact_source: string | null
@@ -371,6 +512,7 @@ export type Database = {
           website: string | null
         }
         Insert: {
+          account_id?: string | null
           company_name?: string | null
           contact_owner?: string | null
           contact_source?: string | null
@@ -391,6 +533,7 @@ export type Database = {
           website?: string | null
         }
         Update: {
+          account_id?: string | null
           company_name?: string | null
           contact_owner?: string | null
           contact_source?: string | null
@@ -410,7 +553,78 @@ export type Database = {
           position?: string | null
           website?: string | null
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "leads_account_id_fkey"
+            columns: ["account_id"]
+            isOneToOne: false
+            referencedRelation: "accounts"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      meetings: {
+        Row: {
+          attendees: Json | null
+          contact_id: string | null
+          created_at: string
+          created_by: string | null
+          description: string | null
+          end_time: string
+          id: string
+          join_url: string | null
+          lead_id: string | null
+          start_time: string
+          status: string
+          subject: string
+          updated_at: string
+        }
+        Insert: {
+          attendees?: Json | null
+          contact_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          end_time: string
+          id?: string
+          join_url?: string | null
+          lead_id?: string | null
+          start_time: string
+          status?: string
+          subject: string
+          updated_at?: string
+        }
+        Update: {
+          attendees?: Json | null
+          contact_id?: string | null
+          created_at?: string
+          created_by?: string | null
+          description?: string | null
+          end_time?: string
+          id?: string
+          join_url?: string | null
+          lead_id?: string | null
+          start_time?: string
+          status?: string
+          subject?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "meetings_contact_id_fkey"
+            columns: ["contact_id"]
+            isOneToOne: false
+            referencedRelation: "contacts"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "meetings_lead_id_fkey"
+            columns: ["lead_id"]
+            isOneToOne: false
+            referencedRelation: "leads"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       notifications: {
         Row: {
@@ -445,6 +659,42 @@ export type Database = {
           status?: string
           updated_at?: string
           user_id?: string
+        }
+        Relationships: []
+      }
+      page_permissions: {
+        Row: {
+          admin_access: boolean
+          created_at: string
+          description: string | null
+          id: string
+          manager_access: boolean
+          page_name: string
+          route: string
+          updated_at: string
+          user_access: boolean
+        }
+        Insert: {
+          admin_access?: boolean
+          created_at?: string
+          description?: string | null
+          id?: string
+          manager_access?: boolean
+          page_name: string
+          route: string
+          updated_at?: string
+          user_access?: boolean
+        }
+        Update: {
+          admin_access?: boolean
+          created_at?: string
+          description?: string | null
+          id?: string
+          manager_access?: boolean
+          page_name?: string
+          route?: string
+          updated_at?: string
+          user_access?: boolean
         }
         Relationships: []
       }

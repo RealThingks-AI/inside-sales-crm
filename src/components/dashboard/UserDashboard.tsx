@@ -5,50 +5,64 @@ import { useQuery } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Skeleton } from "@/components/ui/skeleton";
-import { 
-  Users, 
-  FileText, 
-  Briefcase, 
-  TrendingUp, 
-  Clock, 
-  CheckCircle2,
-  ArrowRight,
-  Plus
-} from "lucide-react";
+import { Users, FileText, Briefcase, TrendingUp, Clock, CheckCircle2, ArrowRight, Plus } from "lucide-react";
 
+const useUserProfile = (userId: string | undefined) => {
+  return useQuery({
+    queryKey: ['user-profile', userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('full_name')
+        .eq('id', userId)
+        .maybeSingle();
+      if (error) throw error;
+      return data?.full_name || null;
+    },
+    enabled: !!userId
+  });
+};
 const UserDashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const { data: userName } = useUserProfile(user?.id);
 
   // Fetch user's leads count
-  const { data: leadsData, isLoading: leadsLoading } = useQuery({
+  const {
+    data: leadsData,
+    isLoading: leadsLoading
+  } = useQuery({
     queryKey: ['user-leads-count', user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('leads')
-        .select('id, lead_status')
-        .eq('created_by', user?.id);
-      
+      const {
+        data,
+        error
+      } = await supabase.from('leads').select('id, lead_status').eq('created_by', user?.id);
       if (error) throw error;
       return {
         total: data?.length || 0,
         new: data?.filter(l => l.lead_status === 'New').length || 0,
         contacted: data?.filter(l => l.lead_status === 'Contacted').length || 0,
-        qualified: data?.filter(l => l.lead_status === 'Qualified').length || 0,
+        qualified: data?.filter(l => l.lead_status === 'Qualified').length || 0
       };
     },
     enabled: !!user?.id
   });
 
   // Fetch user's contacts count
-  const { data: contactsData, isLoading: contactsLoading } = useQuery({
+  const {
+    data: contactsData,
+    isLoading: contactsLoading
+  } = useQuery({
     queryKey: ['user-contacts-count', user?.id],
     queryFn: async () => {
-      const { count, error } = await supabase
-        .from('contacts')
-        .select('id', { count: 'exact', head: true })
-        .eq('created_by', user?.id);
-      
+      const {
+        count,
+        error
+      } = await supabase.from('contacts').select('id', {
+        count: 'exact',
+        head: true
+      }).eq('created_by', user?.id);
       if (error) throw error;
       return count || 0;
     },
@@ -56,20 +70,20 @@ const UserDashboard = () => {
   });
 
   // Fetch user's deals count and value
-  const { data: dealsData, isLoading: dealsLoading } = useQuery({
+  const {
+    data: dealsData,
+    isLoading: dealsLoading
+  } = useQuery({
     queryKey: ['user-deals-count', user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('deals')
-        .select('id, stage, total_contract_value')
-        .eq('created_by', user?.id);
-      
+      const {
+        data,
+        error
+      } = await supabase.from('deals').select('id, stage, total_contract_value').eq('created_by', user?.id);
       if (error) throw error;
-      
       const totalValue = data?.reduce((sum, d) => sum + (d.total_contract_value || 0), 0) || 0;
       const wonDeals = data?.filter(d => d.stage === 'Won') || [];
       const wonValue = wonDeals.reduce((sum, d) => sum + (d.total_contract_value || 0), 0);
-      
       return {
         total: data?.length || 0,
         won: wonDeals.length,
@@ -82,30 +96,24 @@ const UserDashboard = () => {
   });
 
   // Fetch user's pending action items
-  const { data: actionItemsData, isLoading: actionItemsLoading } = useQuery({
+  const {
+    data: actionItemsData,
+    isLoading: actionItemsLoading
+  } = useQuery({
     queryKey: ['user-action-items', user?.id],
     queryFn: async () => {
-      const { data: dealItems, error: dealError } = await supabase
-        .from('deal_action_items')
-        .select('id, status, due_date')
-        .eq('assigned_to', user?.id)
-        .eq('status', 'Open');
-      
+      const {
+        data: dealItems,
+        error: dealError
+      } = await supabase.from('deal_action_items').select('id, status, due_date').eq('assigned_to', user?.id).eq('status', 'Open');
       if (dealError) throw dealError;
-
-      const { data: leadItems, error: leadError } = await supabase
-        .from('lead_action_items')
-        .select('id, status, due_date')
-        .eq('assigned_to', user?.id)
-        .eq('status', 'Open');
-      
+      const {
+        data: leadItems,
+        error: leadError
+      } = await supabase.from('lead_action_items').select('id, status, due_date').eq('assigned_to', user?.id).eq('status', 'Open');
       if (leadError) throw leadError;
-
       const allItems = [...(dealItems || []), ...(leadItems || [])];
-      const overdue = allItems.filter(item => 
-        item.due_date && new Date(item.due_date) < new Date()
-      ).length;
-
+      const overdue = allItems.filter(item => item.due_date && new Date(item.due_date) < new Date()).length;
       return {
         total: allItems.length,
         overdue
@@ -113,38 +121,30 @@ const UserDashboard = () => {
     },
     enabled: !!user?.id
   });
-
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat('en-US', {
       style: 'currency',
       currency: 'EUR',
       minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
+      maximumFractionDigits: 0
     }).format(amount);
   };
-
   const isLoading = leadsLoading || contactsLoading || dealsLoading || actionItemsLoading;
-
   if (isLoading) {
-    return (
-      <div className="p-6 space-y-6">
+    return <div className="p-6 space-y-6">
         <Skeleton className="h-8 w-64" />
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {[...Array(4)].map((_, i) => (
-            <Skeleton key={i} className="h-32" />
-          ))}
+          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-32" />)}
         </div>
-      </div>
-    );
+      </div>;
   }
-
-  return (
-    <div className="p-6 space-y-8">
+  return <div className="p-6 space-y-8">
       {/* Welcome Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-foreground">Welcome back!</h1>
-          <p className="text-muted-foreground">Here's an overview of your sales activity</p>
+          <h1 className="text-2xl font-bold text-foreground">
+            Welcome back{userName ? `, ${userName}` : ''}!
+          </h1>
         </div>
       </div>
 
@@ -233,33 +233,21 @@ const UserDashboard = () => {
             <CardTitle>Quick Actions</CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
-            <Button 
-              variant="outline" 
-              className="w-full justify-between"
-              onClick={() => navigate('/leads')}
-            >
+            <Button variant="outline" className="w-full justify-between" onClick={() => navigate('/leads')}>
               <span className="flex items-center gap-2">
                 <Plus className="w-4 h-4" />
                 Add New Lead
               </span>
               <ArrowRight className="w-4 h-4" />
             </Button>
-            <Button 
-              variant="outline" 
-              className="w-full justify-between"
-              onClick={() => navigate('/contacts')}
-            >
+            <Button variant="outline" className="w-full justify-between" onClick={() => navigate('/contacts')}>
               <span className="flex items-center gap-2">
                 <Plus className="w-4 h-4" />
                 Add New Contact
               </span>
               <ArrowRight className="w-4 h-4" />
             </Button>
-            <Button 
-              variant="outline" 
-              className="w-full justify-between"
-              onClick={() => navigate('/deals')}
-            >
+            <Button variant="outline" className="w-full justify-between" onClick={() => navigate('/deals')}>
               <span className="flex items-center gap-2">
                 <Plus className="w-4 h-4" />
                 Create New Deal
@@ -296,8 +284,6 @@ const UserDashboard = () => {
           </div>
         </CardContent>
       </Card>
-    </div>
-  );
+    </div>;
 };
-
 export default UserDashboard;

@@ -1,32 +1,31 @@
+import { useState } from "react";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Edit, Trash2, ArrowUpDown, ArrowUp, ArrowDown, MoreHorizontal, UserPlus } from "lucide-react";
+import { Edit, Trash2, ArrowUpDown, ArrowUp, ArrowDown, MoreHorizontal, UserPlus, Mail } from "lucide-react";
 import { useUserDisplayNames } from "@/hooks/useUserDisplayNames";
 import { ContactColumnConfig } from "../ContactColumnCustomizer";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { AccountViewModal } from "../AccountViewModal";
+import { SendEmailModal } from "../SendEmailModal";
 
 interface Contact {
   id: string;
   contact_name: string;
   company_name?: string;
+  account_company_name?: string;
+  account_id?: string;
   position?: string;
   email?: string;
   phone_no?: string;
-  region?: string;
   contact_owner?: string;
-  lead_status?: string;
+  contact_source?: string;
   created_by?: string;
   linkedin?: string;
   website?: string;
-  contact_source?: string;
-  industry?: string;
-  description?: string;
-  mobile_no?: string;
-  city?: string;
   [key: string]: any;
 }
 
@@ -60,6 +59,10 @@ export const ContactTableBody = ({
   onSort
 }: ContactTableBodyProps) => {
   const { toast } = useToast();
+  const [viewAccountId, setViewAccountId] = useState<string | null>(null);
+  const [accountViewOpen, setAccountViewOpen] = useState(false);
+  const [emailContact, setEmailContact] = useState<Contact | null>(null);
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
   
   // Get all unique user IDs that we need to fetch display names for
   const contactOwnerIds = [...new Set(pageContacts.map(c => c.contact_owner).filter(Boolean))];
@@ -272,6 +275,19 @@ export const ContactTableBody = ({
                       >
                         {contact[column.field as keyof Contact]}
                       </button>
+                    ) : column.field === 'account_company_name' && contact.account_company_name ? (
+                      <button
+                        onClick={() => {
+                          if (contact.account_id) {
+                            setViewAccountId(contact.account_id);
+                            setAccountViewOpen(true);
+                          }
+                        }}
+                        className="text-primary hover:underline font-medium text-left truncate max-w-[200px]"
+                        title={contact.account_company_name}
+                      >
+                        {contact.account_company_name}
+                      </button>
                     ) : (
                       <span className="truncate max-w-[200px]" title={String(getDisplayValue(contact, column.field))}>
                         {getDisplayValue(contact, column.field)}
@@ -280,7 +296,7 @@ export const ContactTableBody = ({
                   </div>
                 </TableCell>
               ))}
-              <TableCell className="w-32 py-3">
+              <TableCell className="w-40 py-3">
                 <div className="flex items-center justify-end gap-1 pr-2">
                   <Button
                     variant="ghost"
@@ -290,6 +306,19 @@ export const ContactTableBody = ({
                     title="Edit contact"
                   >
                     <Edit className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => {
+                      setEmailContact(contact);
+                      setEmailModalOpen(true);
+                    }}
+                    className="h-8 w-8 p-0 hover:bg-muted text-primary"
+                    title="Send email"
+                    disabled={!contact.email}
+                  >
+                    <Mail className="w-4 h-4" />
                   </Button>
                   <Button
                     variant="ghost"
@@ -315,6 +344,20 @@ export const ContactTableBody = ({
           ))}
         </TableBody>
       </Table>
+
+      {/* Account View Modal */}
+      <AccountViewModal
+        open={accountViewOpen}
+        onOpenChange={setAccountViewOpen}
+        accountId={viewAccountId}
+      />
+
+      {/* Send Email Modal */}
+      <SendEmailModal
+        open={emailModalOpen}
+        onOpenChange={setEmailModalOpen}
+        contact={emailContact}
+      />
     </div>
   );
 };

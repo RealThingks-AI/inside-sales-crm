@@ -1,4 +1,3 @@
-
 import { Bell, CheckCheck, Trash2, MoreVertical } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -54,38 +53,28 @@ const Notifications = () => {
   }, []);
 
   const handleNotificationClick = async (notification: any) => {
-    // Mark as read first
     if (notification.status === 'unread') {
       await markAsRead(notification.id);
     }
 
-    // Parse the notification message to extract IDs and navigate accordingly
     const message = notification.message.toLowerCase();
-    
-    // Check for deal references in the message
     const dealMatch = message.match(/deal[:\s]+([a-f0-9-]{36})/);
     const leadMatch = message.match(/lead[:\s]+([a-f0-9-]{36})/);
     
-    // Navigate based on the notification content and available IDs
     if (notification.lead_id) {
-      // Direct lead ID available, navigate to leads page
       navigate(`/leads?highlight=${notification.lead_id}`);
     } else if (dealMatch) {
-      // Deal ID found in message, navigate to deals page
       const dealId = dealMatch[1];
       navigate(`/deals?highlight=${dealId}`);
     } else if (leadMatch) {
-      // Lead ID found in message, navigate to leads page  
       const leadId = leadMatch[1];
       navigate(`/leads?highlight=${leadId}`);
     } else if (notification.notification_type === 'action_item') {
-      // Action item notification - try to determine context
       if (message.includes('deal')) {
         navigate('/deals');
       } else if (message.includes('lead') || message.includes('contact')) {
         navigate('/leads');
       } else {
-        // Default to deals page for action items
         navigate('/deals');
       }
     } else if (notification.notification_type === 'deal_update') {
@@ -93,7 +82,6 @@ const Notifications = () => {
     } else if (notification.notification_type === 'lead_update') {
       navigate('/leads');
     } else {
-      // Default navigation
       navigate('/dashboard');
     }
   };
@@ -131,37 +119,41 @@ const Notifications = () => {
   }
 
   return (
-    <div className="flex flex-col h-screen">
-      {/* Header */}
-      <div className="flex items-center justify-between p-6 border-b bg-background">
-        <div className="flex items-center gap-3">
-          <Bell className="h-6 w-6 text-primary" />
-          <h1 className="text-2xl font-bold text-foreground">Notifications</h1>
-          {unreadCount > 0 && (
-            <Badge variant="destructive" className="rounded-full">
-              {unreadCount} unread
-            </Badge>
-          )}
-          <div className="text-sm text-muted-foreground">
-            Page {currentPage} of {totalPages} • {totalNotifications} total
+    <div className="h-screen flex flex-col bg-background overflow-hidden">
+      {/* Fixed Header */}
+      <div className="flex-shrink-0 bg-background">
+        <div className="px-6 h-16 flex items-center border-b w-full">
+          <div className="flex items-center justify-between w-full">
+            <div className="flex items-center gap-3">
+              <Bell className="h-6 w-6 text-primary" />
+              <h1 className="text-2xl font-bold text-foreground">Notifications</h1>
+              {unreadCount > 0 && (
+                <Badge variant="destructive" className="rounded-full">
+                  {unreadCount} unread
+                </Badge>
+              )}
+              <div className="text-sm text-muted-foreground">
+                Page {currentPage} of {totalPages} • {totalNotifications} total
+              </div>
+            </div>
+            
+            {unreadCount > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleMarkAllRead}
+                className="flex items-center gap-2"
+              >
+                <CheckCheck className="h-4 w-4" />
+                Mark all as read
+              </Button>
+            )}
           </div>
         </div>
-        
-        {unreadCount > 0 && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={handleMarkAllRead}
-            className="flex items-center gap-2"
-          >
-            <CheckCheck className="h-4 w-4" />
-            Mark all as read
-          </Button>
-        )}
       </div>
 
       {/* Notifications List */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 min-h-0 overflow-hidden">
         {notifications.length === 0 ? (
           <div className="flex items-center justify-center h-full">
             <div className="text-center text-muted-foreground">
