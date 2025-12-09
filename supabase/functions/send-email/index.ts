@@ -14,12 +14,13 @@ interface EmailRequest {
 }
 
 async function getAccessToken(): Promise<string> {
-  const tenantId = Deno.env.get("AZURE_TENANT_ID");
-  const clientId = Deno.env.get("AZURE_CLIENT_ID");
-  const clientSecret = Deno.env.get("AZURE_CLIENT_SECRET");
+  // Use email-specific Azure credentials
+  const tenantId = Deno.env.get("AZURE_EMAIL_TENANT_ID");
+  const clientId = Deno.env.get("AZURE_EMAIL_CLIENT_ID");
+  const clientSecret = Deno.env.get("AZURE_EMAIL_CLIENT_SECRET");
 
   if (!tenantId || !clientId || !clientSecret) {
-    throw new Error("Azure credentials not configured");
+    throw new Error("Azure email credentials not configured. Please set AZURE_EMAIL_TENANT_ID, AZURE_EMAIL_CLIENT_ID, and AZURE_EMAIL_CLIENT_SECRET.");
   }
 
   const tokenUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;

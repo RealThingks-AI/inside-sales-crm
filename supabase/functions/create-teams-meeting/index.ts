@@ -20,12 +20,13 @@ interface MeetingRequest {
 }
 
 async function getAccessToken(): Promise<string> {
-  const tenantId = Deno.env.get('AZURE_TENANT_ID');
-  const clientId = Deno.env.get('AZURE_CLIENT_ID');
-  const clientSecret = Deno.env.get('AZURE_CLIENT_SECRET');
+  // Use Teams-specific Azure credentials
+  const tenantId = Deno.env.get('AZURE_TEAMS_TENANT_ID');
+  const clientId = Deno.env.get('AZURE_TEAMS_CLIENT_ID');
+  const clientSecret = Deno.env.get('AZURE_TEAMS_CLIENT_SECRET');
 
   if (!tenantId || !clientId || !clientSecret) {
-    throw new Error('Missing Azure credentials. Please configure AZURE_TENANT_ID, AZURE_CLIENT_ID, and AZURE_CLIENT_SECRET.');
+    throw new Error('Missing Azure Teams credentials. Please configure AZURE_TEAMS_TENANT_ID, AZURE_TEAMS_CLIENT_ID, and AZURE_TEAMS_CLIENT_SECRET.');
   }
 
   console.log('Fetching access token from Azure AD...');
