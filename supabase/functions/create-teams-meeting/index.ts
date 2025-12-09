@@ -1,4 +1,3 @@
-
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.52.0';
 
@@ -7,6 +6,154 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
+
+interface Attendee {
+  email: string;
+  name: string;
+}
+
+interface MeetingRequest {
+  subject: string;
+  attendees: Attendee[];
+  startTime: string;
+  endTime: string;
+}
+
+async function getAccessToken(): Promise<string> {
+  const tenantId = Deno.env.get('AZURE_TENANT_ID');
+  const clientId = Deno.env.get('AZURE_CLIENT_ID');
+  const clientSecret = Deno.env.get('AZURE_CLIENT_SECRET');
+
+  if (!tenantId || !clientId || !clientSecret) {
+    throw new Error('Missing Azure credentials. Please configure AZURE_TENANT_ID, AZURE_CLIENT_ID, and AZURE_CLIENT_SECRET.');
+  }
+
+  console.log('Fetching access token from Azure AD...');
+  
+  const tokenUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
+  
+  const params = new URLSearchParams();
+  params.append('client_id', clientId);
+  params.append('client_secret', clientSecret);
+  params.append('scope', 'https://graph.microsoft.com/.default');
+  params.append('grant_type', 'client_credentials');
+
+  const response = await fetch(tokenUrl, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/x-www-form-urlencoded',
+    },
+    body: params.toString(),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    console.error('Azure AD token error:', data);
+    throw new Error(data.error_description || 'Failed to get access token from Azure AD');
+  }
+
+  console.log('Successfully obtained access token');
+  return data.access_token;
+}
+
+async function createOnlineMeeting(accessToken: string, meetingRequest: MeetingRequest): Promise<any> {
+  console.log('Creating Teams meeting via Microsoft Graph API...');
+  
+  // Format attendees for Graph API
+  const attendees = meetingRequest.attendees.map(attendee => ({
+    emailAddress: {
+      address: attendee.email,
+      name: attendee.name
+    },
+    type: 'required'
+  }));
+
+  // Create online meeting using Microsoft Graph API
+  // Using /me/onlineMeetings requires delegated permissions
+  // For app-only, we need to use /users/{userId}/onlineMeetings
+  // Alternative: Use application permissions with a specific user ID
+  
+  const meetingBody = {
+    startDateTime: meetingRequest.startTime,
+    endDateTime: meetingRequest.endTime,
+    subject: meetingRequest.subject,
+    participants: {
+      attendees: attendees.map(a => ({
+        upn: a.emailAddress.address,
+        role: 'attendee'
+      }))
+    },
+    lobbyBypassSettings: {
+      scope: 'everyone',
+      isDialInBypassEnabled: true
+    },
+    allowedPresenters: 'everyone'
+  };
+
+  console.log('Meeting request body:', JSON.stringify(meetingBody, null, 2));
+
+  // For app-only permissions, we need a user ID to create meetings on behalf of
+  // This requires OnlineMeetings.ReadWrite.All application permission
+  // and the user must have a Teams license
+  
+  // First, try to get the first user with Teams license
+  const usersResponse = await fetch(
+    'https://graph.microsoft.com/v1.0/users?$select=id,displayName,mail,userPrincipalName&$top=1',
+    {
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+    }
+  );
+
+  if (!usersResponse.ok) {
+    const errorData = await usersResponse.json();
+    console.error('Failed to fetch users:', errorData);
+    throw new Error('Failed to fetch users from Microsoft Graph');
+  }
+
+  const usersData = await usersResponse.json();
+  
+  if (!usersData.value || usersData.value.length === 0) {
+    throw new Error('No users found in the Azure AD tenant');
+  }
+
+  const organizerUserId = usersData.value[0].id;
+  console.log('Using organizer user ID:', organizerUserId);
+
+  // Create the online meeting
+  const meetingResponse = await fetch(
+    `https://graph.microsoft.com/v1.0/users/${organizerUserId}/onlineMeetings`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(meetingBody),
+    }
+  );
+
+  const meetingData = await meetingResponse.json();
+
+  if (!meetingResponse.ok) {
+    console.error('Graph API error creating meeting:', meetingData);
+    throw new Error(meetingData.error?.message || 'Failed to create Teams meeting');
+  }
+
+  console.log('Teams meeting created successfully:', meetingData.id);
+  
+  return {
+    id: meetingData.id,
+    joinUrl: meetingData.joinWebUrl,
+    joinInformation: meetingData.joinInformation,
+    subject: meetingData.subject,
+    startDateTime: meetingData.startDateTime,
+    endDateTime: meetingData.endDateTime,
+  };
+}
 
 serve(async (req) => {
   // Handle CORS preflight requests
@@ -46,7 +193,7 @@ serve(async (req) => {
       );
     }
 
-    const { subject, attendees, startTime, endTime } = await req.json();
+    const { subject, attendees, startTime, endTime }: MeetingRequest = await req.json();
 
     if (!subject || !attendees || !startTime || !endTime) {
       return new Response(
@@ -55,7 +202,15 @@ serve(async (req) => {
       );
     }
 
-    // Log the meeting creation attempt for security audit
+    console.log('Creating Teams meeting:', { subject, attendeesCount: attendees.length, startTime, endTime });
+
+    // Get Azure AD access token
+    const accessToken = await getAccessToken();
+
+    // Create the Teams meeting
+    const meeting = await createOnlineMeeting(accessToken, { subject, attendees, startTime, endTime });
+
+    // Log the meeting creation for security audit
     const adminClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
@@ -66,9 +221,11 @@ serve(async (req) => {
         p_action: 'TEAMS_MEETING_CREATED',
         p_resource_type: 'meeting',
         p_details: {
+          meeting_id: meeting.id,
           subject,
           attendee_count: attendees.length,
           created_by: user.id,
+          join_url: meeting.joinUrl,
           created_at: new Date().toISOString()
         }
       });
@@ -76,20 +233,7 @@ serve(async (req) => {
       console.warn('Failed to log security event:', logError);
     }
 
-    // Create meeting object (simplified - in production you'd integrate with Microsoft Graph API)
-    const meeting = {
-      id: crypto.randomUUID(),
-      subject,
-      attendees,
-      startTime,
-      endTime,
-      organizer: user.email,
-      joinUrl: `https://teams.microsoft.com/l/meetup-join/${crypto.randomUUID()}`,
-      createdAt: new Date().toISOString(),
-      createdBy: user.id
-    };
-
-    console.log('Teams meeting created:', meeting.id);
+    console.log('Teams meeting created successfully:', meeting.id);
 
     return new Response(
       JSON.stringify({ 
@@ -107,7 +251,7 @@ serve(async (req) => {
     console.error('Error creating Teams meeting:', error);
     return new Response(
       JSON.stringify({ 
-        error: 'Internal server error',
+        error: error.message || 'Internal server error',
         details: error.message 
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
