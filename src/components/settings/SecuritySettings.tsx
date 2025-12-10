@@ -227,45 +227,8 @@ const SecuritySettings = () => {
   return <div className="space-y-6">
       {/* Session Management */}
       <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Shield className="w-5 h-5" />
-            Session Management
-          </CardTitle>
-          <p className="text-sm text-muted-foreground">
-            Manage and monitor your active sessions across different devices
-          </p>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="space-y-3">
-            {sessions.map(session => <div key={session.id} className="flex items-center justify-between p-4 border rounded-lg">
-                <div className="flex items-center gap-3">
-                  <Smartphone className="w-5 h-5 text-muted-foreground" />
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <span className="font-medium">{session.device}</span>
-                      {session.current && <Badge variant="secondary" className="text-xs">
-                          Current
-                        </Badge>}
-                    </div>
-                    <div className="text-sm text-muted-foreground">
-                      {session.location} • {session.lastActive}
-                    </div>
-                  </div>
-                </div>
-                {!session.current && <Button variant="outline" size="sm" onClick={() => handleEndSession(session.id)} className="flex items-center gap-2">
-                    <LogOut className="w-4 h-4" />
-                    End Session
-                  </Button>}
-              </div>)}
-          </div>
-
-          {sessions.filter(s => !s.current).length > 0 && <div className="pt-4 border-t">
-              <Button variant="destructive" onClick={handleEndAllSessions} className="w-full sm:w-auto">
-                End All Other Sessions
-              </Button>
-            </div>}
-        </CardContent>
+        
+        
       </Card>
 
       {/* Password Change */}

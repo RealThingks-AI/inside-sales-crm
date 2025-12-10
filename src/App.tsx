@@ -18,6 +18,7 @@ import Settings from "./pages/Settings";
 import Auth from "./pages/Auth";
 import NotFound from "./pages/NotFound";
 import Notifications from "./pages/Notifications";
+import Tasks from "./pages/Tasks";
 import { useState } from "react";
 
 const queryClient = new QueryClient();
@@ -141,6 +142,11 @@ const AppRouter = () => (
       <Route path="/notifications" element={
         <ProtectedRoute>
           <Notifications />
+        </ProtectedRoute>
+      } />
+      <Route path="/tasks" element={
+        <ProtectedRoute>
+          <Tasks />
         </ProtectedRoute>
       } />
       <Route path="/settings" element={

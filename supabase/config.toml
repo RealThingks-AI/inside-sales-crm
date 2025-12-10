@@ -9,6 +9,9 @@ verify_jwt = false
 [functions.create-teams-meeting]
 verify_jwt = false
 
+[functions.cancel-teams-meeting]
+verify_jwt = false
+
 [functions.fetch-user-display-names]
 verify_jwt = false
 

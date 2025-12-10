@@ -8,6 +8,7 @@ import { ContactTableBody } from "./contact-table/ContactTableBody";
 import { ContactTablePagination } from "./contact-table/ContactTablePagination";
 import { ContactModal } from "./ContactModal";
 import { ContactColumnCustomizer, ContactColumnConfig } from "./ContactColumnCustomizer";
+import { ContactDetailModal } from "./contacts/ContactDetailModal";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog";
 
 interface Contact {
@@ -20,7 +21,7 @@ interface Contact {
   email?: string;
   phone_no?: string;
   mobile_no?: string;
-  region?: string; // Changed from country to region
+  region?: string;
   city?: string;
   state?: string;
   contact_owner?: string;
@@ -36,6 +37,12 @@ interface Contact {
   no_of_employees?: number;
   created_by?: string;
   modified_by?: string;
+  tags?: string[];
+  score?: number;
+  segment?: string;
+  email_opens?: number;
+  email_clicks?: number;
+  engagement_score?: number;
 }
 
 const defaultColumns: ContactColumnConfig[] = [
@@ -74,6 +81,8 @@ export const ContactTable = ({
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [editingContact, setEditingContact] = useState<Contact | null>(null);
+  const [viewingContact, setViewingContact] = useState<Contact | null>(null);
+  const [showDetailModal, setShowDetailModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [contactToDelete, setContactToDelete] = useState<string | null>(null);
   const [columns, setColumns] = useState(defaultColumns);
@@ -221,6 +230,12 @@ export const ContactTable = ({
     setShowModal(true);
   };
 
+  const handleViewContact = (contact: Contact) => {
+    console.log('ContactTable: Viewing contact:', contact.id);
+    setViewingContact(contact);
+    setShowDetailModal(true);
+  };
+
   const visibleColumns = columns.filter(col => col.visible);
   const totalPages = Math.ceil(filteredContacts.length / itemsPerPage);
   const startIndex = (currentPage - 1) * itemsPerPage;
@@ -260,6 +275,7 @@ export const ContactTable = ({
           selectedContacts={selectedContacts}
           setSelectedContacts={setSelectedContacts}
           onEdit={handleEditContact}
+          onView={handleViewContact}
           onDelete={(id) => {
             setContactToDelete(id);
             setShowDeleteDialog(true);
@@ -291,6 +307,13 @@ export const ContactTable = ({
           fetchContacts();
           setEditingContact(null);
         }}
+      />
+
+      <ContactDetailModal
+        open={showDetailModal}
+        onOpenChange={setShowDetailModal}
+        contact={viewingContact as any}
+        onUpdate={fetchContacts}
       />
 
       <ContactColumnCustomizer

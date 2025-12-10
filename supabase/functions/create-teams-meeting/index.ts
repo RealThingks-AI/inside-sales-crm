@@ -17,10 +17,11 @@ interface MeetingRequest {
   attendees: Attendee[];
   startTime: string;
   endTime: string;
+  timezone?: string;
+  description?: string;
 }
 
 async function getAccessToken(): Promise<string> {
-  // Use Teams-specific Azure credentials
   const tenantId = Deno.env.get('AZURE_TEAMS_TENANT_ID');
   const clientId = Deno.env.get('AZURE_TEAMS_CLIENT_ID');
   const clientSecret = Deno.env.get('AZURE_TEAMS_CLIENT_SECRET');
@@ -58,12 +59,9 @@ async function getAccessToken(): Promise<string> {
   return data.access_token;
 }
 
-async function createOnlineMeeting(accessToken: string, meetingRequest: MeetingRequest, organizerEmail: string): Promise<any> {
-  console.log('Creating Teams meeting via Microsoft Graph API...');
-  
-  // First, get the user by email to get their ID
+async function getUserId(accessToken: string, email: string): Promise<string> {
   const userResponse = await fetch(
-    `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(organizerEmail)}`,
+    `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(email)}`,
     {
       headers: {
         'Authorization': `Bearer ${accessToken}`,
@@ -75,22 +73,22 @@ async function createOnlineMeeting(accessToken: string, meetingRequest: MeetingR
   if (!userResponse.ok) {
     const errorData = await userResponse.json();
     console.error('Failed to fetch user by email:', errorData);
-    
-    // If we can't get the user, the app might not have User.Read.All permission
-    // In this case, we need the user to be specified in the Azure AD app
     throw new Error(
-      `Cannot find user in Azure AD: ${organizerEmail}. ` +
+      `Cannot find user in Azure AD: ${email}. ` +
       `Please ensure the Azure App has User.Read.All permission with admin consent, ` +
       `or the user exists in your Azure AD tenant.`
     );
   }
 
   const userData = await userResponse.json();
-  const organizerUserId = userData.id;
-  console.log('Found organizer user ID:', organizerUserId);
+  console.log('Found user ID:', userData.id);
+  return userData.id;
+}
 
-  // Create meeting body for online meeting
-  const meetingBody = {
+async function createOnlineMeeting(accessToken: string, meetingRequest: MeetingRequest, organizerUserId: string): Promise<any> {
+  console.log('Creating Teams online meeting via Microsoft Graph API...');
+  
+  const meetingBody: Record<string, any> = {
     startDateTime: meetingRequest.startTime,
     endDateTime: meetingRequest.endTime,
     subject: meetingRequest.subject,
@@ -101,9 +99,12 @@ async function createOnlineMeeting(accessToken: string, meetingRequest: MeetingR
     allowedPresenters: 'everyone'
   };
 
-  console.log('Meeting request body:', JSON.stringify(meetingBody, null, 2));
+  if (meetingRequest.timezone) {
+    console.log('Meeting timezone:', meetingRequest.timezone);
+  }
 
-  // Create the online meeting
+  console.log('Online meeting request body:', JSON.stringify(meetingBody, null, 2));
+
   const meetingResponse = await fetch(
     `https://graph.microsoft.com/v1.0/users/${organizerUserId}/onlineMeetings`,
     {
@@ -119,9 +120,8 @@ async function createOnlineMeeting(accessToken: string, meetingRequest: MeetingR
   const meetingData = await meetingResponse.json();
 
   if (!meetingResponse.ok) {
-    console.error('Graph API error creating meeting:', meetingData);
+    console.error('Graph API error creating online meeting:', meetingData);
     
-    // Provide helpful error messages based on common issues
     if (meetingData.error?.code === 'AuthenticationError') {
       throw new Error(
         'Authentication error with Microsoft Graph. ' +
@@ -131,14 +131,14 @@ async function createOnlineMeeting(accessToken: string, meetingRequest: MeetingR
     
     if (meetingData.error?.code === 'ResourceNotFound') {
       throw new Error(
-        `User ${organizerEmail} does not have a Teams license or is not enabled for online meetings.`
+        `User does not have a Teams license or is not enabled for online meetings.`
       );
     }
     
-    throw new Error(meetingData.error?.message || 'Failed to create Teams meeting');
+    throw new Error(meetingData.error?.message || 'Failed to create Teams online meeting');
   }
 
-  console.log('Teams meeting created successfully:', meetingData.id);
+  console.log('Teams online meeting created successfully:', meetingData.id);
   
   return {
     id: meetingData.id,
@@ -147,6 +147,88 @@ async function createOnlineMeeting(accessToken: string, meetingRequest: MeetingR
     subject: meetingData.subject,
     startDateTime: meetingData.startDateTime,
     endDateTime: meetingData.endDateTime,
+  };
+}
+
+async function createCalendarEvent(
+  accessToken: string, 
+  meetingRequest: MeetingRequest, 
+  organizerUserId: string, 
+  onlineMeeting: any
+): Promise<any> {
+  console.log('Creating calendar event via Microsoft Graph API...');
+  
+  // Build attendees list for calendar event
+  const calendarAttendees = meetingRequest.attendees.map(attendee => ({
+    emailAddress: {
+      address: attendee.email,
+      name: attendee.name || attendee.email
+    },
+    type: 'required'
+  }));
+
+  // Build event body with Teams meeting link
+  const eventBody: Record<string, any> = {
+    subject: meetingRequest.subject,
+    body: {
+      contentType: 'HTML',
+      content: `${meetingRequest.description || ''}<br><br>
+        <b>Join Microsoft Teams Meeting</b><br>
+        <a href="${onlineMeeting.joinUrl}">${onlineMeeting.joinUrl}</a>`
+    },
+    start: {
+      dateTime: meetingRequest.startTime,
+      timeZone: meetingRequest.timezone || 'UTC'
+    },
+    end: {
+      dateTime: meetingRequest.endTime,
+      timeZone: meetingRequest.timezone || 'UTC'
+    },
+    attendees: calendarAttendees,
+    isOnlineMeeting: true,
+    onlineMeetingProvider: 'teamsForBusiness',
+    onlineMeeting: {
+      joinUrl: onlineMeeting.joinUrl
+    }
+  };
+
+  console.log('Calendar event request body:', JSON.stringify(eventBody, null, 2));
+
+  const eventResponse = await fetch(
+    `https://graph.microsoft.com/v1.0/users/${organizerUserId}/events`,
+    {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${accessToken}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(eventBody),
+    }
+  );
+
+  const eventData = await eventResponse.json();
+
+  if (!eventResponse.ok) {
+    console.error('Graph API error creating calendar event:', eventData);
+    
+    if (eventData.error?.code === 'AuthenticationError') {
+      throw new Error(
+        'Authentication error with Microsoft Graph. ' +
+        'Please ensure the Azure App has Calendars.ReadWrite permission with admin consent.'
+      );
+    }
+    
+    throw new Error(eventData.error?.message || 'Failed to create calendar event');
+  }
+
+  console.log('Calendar event created successfully:', eventData.id);
+  
+  return {
+    id: eventData.id,
+    webLink: eventData.webLink,
+    subject: eventData.subject,
+    startDateTime: eventData.start?.dateTime,
+    endDateTime: eventData.end?.dateTime,
   };
 }
 
@@ -188,7 +270,7 @@ serve(async (req) => {
       );
     }
 
-    const { subject, attendees, startTime, endTime }: MeetingRequest = await req.json();
+    const { subject, attendees, startTime, endTime, timezone, description }: MeetingRequest = await req.json();
 
     if (!subject || !attendees || !startTime || !endTime) {
       return new Response(
@@ -197,17 +279,35 @@ serve(async (req) => {
       );
     }
 
-    console.log('Creating Teams meeting:', { subject, attendeesCount: attendees.length, startTime, endTime });
+    console.log('Creating Teams meeting:', { subject, attendeesCount: attendees.length, startTime, endTime, timezone });
 
     // Get Azure AD access token
     const accessToken = await getAccessToken();
 
     // Use the authenticated user's email as the organizer
-    // The user must exist in the Azure AD tenant
     const organizerEmail = user.email!;
+    
+    // Get the organizer's user ID from Azure AD
+    const organizerUserId = await getUserId(accessToken, organizerEmail);
 
-    // Create the Teams meeting
-    const meeting = await createOnlineMeeting(accessToken, { subject, attendees, startTime, endTime }, organizerEmail);
+    // Step 1: Create the Teams online meeting
+    const onlineMeeting = await createOnlineMeeting(accessToken, { subject, attendees, startTime, endTime, timezone }, organizerUserId);
+
+    // Step 2: Create a calendar event with the Teams meeting link
+    let calendarEvent = null;
+    try {
+      calendarEvent = await createCalendarEvent(
+        accessToken, 
+        { subject, attendees, startTime, endTime, timezone, description }, 
+        organizerUserId, 
+        onlineMeeting
+      );
+      console.log('Calendar event created and meeting will appear in Teams calendar');
+    } catch (calendarError: any) {
+      console.warn('Failed to create calendar event (meeting link still works):', calendarError.message);
+      // Don't fail the entire request if calendar creation fails
+      // The online meeting link is still valid
+    }
 
     // Log the meeting creation for security audit
     const adminClient = createClient(
@@ -220,11 +320,12 @@ serve(async (req) => {
         p_action: 'TEAMS_MEETING_CREATED',
         p_resource_type: 'meeting',
         p_details: {
-          meeting_id: meeting.id,
+          meeting_id: onlineMeeting.id,
+          calendar_event_id: calendarEvent?.id,
           subject,
           attendee_count: attendees.length,
           created_by: user.id,
-          join_url: meeting.joinUrl,
+          join_url: onlineMeeting.joinUrl,
           created_at: new Date().toISOString()
         }
       });
@@ -232,13 +333,16 @@ serve(async (req) => {
       console.warn('Failed to log security event:', logError);
     }
 
-    console.log('Teams meeting created successfully:', meeting.id);
+    console.log('Teams meeting created successfully:', onlineMeeting.id);
 
     return new Response(
       JSON.stringify({ 
         success: true,
-        meeting,
-        message: 'Teams meeting created successfully'
+        meeting: onlineMeeting,
+        calendarEvent,
+        message: calendarEvent 
+          ? 'Teams meeting created and added to calendar' 
+          : 'Teams meeting created (calendar event may not have been created)'
       }),
       { 
         status: 200, 

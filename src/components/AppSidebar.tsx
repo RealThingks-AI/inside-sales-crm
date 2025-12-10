@@ -10,7 +10,8 @@ import {
   Bell,
   Sun,
   Moon,
-  Building2
+  Building2,
+  CheckSquare
 } from "lucide-react";
 import { NavLink, useLocation, useNavigate } from "react-router-dom";
 import { useAuth } from "@/hooks/useAuth";
@@ -42,6 +43,7 @@ const allMenuItems = [
   { title: "Leads", url: "/leads", route: "/leads", icon: UserPlus },
   { title: "Meetings", url: "/meetings", route: "/meetings", icon: Video },
   { title: "Deals", url: "/deals", route: "/deals", icon: BarChart3 },
+  { title: "Tasks", url: "/tasks", route: "/tasks", icon: CheckSquare },
   { title: "Settings", url: "/settings", route: "/settings", icon: Settings },
 ];
 

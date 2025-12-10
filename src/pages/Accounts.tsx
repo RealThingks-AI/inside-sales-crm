@@ -1,16 +1,17 @@
 import AccountTable from "@/components/AccountTable";
 import { Button } from "@/components/ui/button";
-import { Settings, Plus, Trash2, MoreVertical, Upload, Download } from "lucide-react";
+import { Settings, Plus, Trash2, MoreVertical, Upload, Download, List, BarChart3 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useState, useRef } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useAccountsImportExport } from "@/hooks/useAccountsImportExport";
 import { AccountDeleteConfirmDialog } from "@/components/AccountDeleteConfirmDialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { AccountAnalyticsDashboard } from "@/components/accounts/AccountAnalyticsDashboard";
+
 const Accounts = () => {
-  const {
-    toast
-  } = useToast();
+  const { toast } = useToast();
+  const [viewMode, setViewMode] = useState<'table' | 'analytics'>('table');
   const [showColumnCustomizer, setShowColumnCustomizer] = useState(false);
   const [showModal, setShowModal] = useState(false);
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
@@ -53,18 +54,29 @@ const Accounts = () => {
               <h1 className="text-2xl font-bold text-foreground">Accounts</h1>
             </div>
             <div className="flex items-center gap-2">
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <span></span>
-              </TooltipTrigger>
-              <TooltipContent>
-                <p>Columns</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-          
-          {selectedAccounts.length > 0 && <TooltipProvider>
+              {/* View Toggle */}
+              <div className="flex items-center gap-1 bg-muted rounded-lg p-1">
+                <Button
+                  variant={viewMode === 'table' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  onClick={() => setViewMode('table')}
+                  className="gap-2"
+                >
+                  <List className="h-4 w-4" />
+                  List
+                </Button>
+                <Button
+                  variant={viewMode === 'analytics' ? 'secondary' : 'ghost'}
+                  size="sm"
+                  onClick={() => setViewMode('analytics')}
+                  className="gap-2"
+                >
+                  <BarChart3 className="h-4 w-4" />
+                  Analytics
+                </Button>
+              </div>
+              
+              {selectedAccounts.length > 0 && <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button variant="outline" size="icon" onClick={handleBulkDeleteClick} disabled={isDeleting}>
@@ -127,11 +139,15 @@ const Accounts = () => {
 
       {/* Main Content Area */}
       <div className="flex-1 min-h-0 overflow-auto p-6">
-        <AccountTable showColumnCustomizer={showColumnCustomizer} setShowColumnCustomizer={setShowColumnCustomizer} showModal={showModal} setShowModal={setShowModal} selectedAccounts={selectedAccounts} setSelectedAccounts={setSelectedAccounts} key={refreshTrigger} onBulkDeleteComplete={() => {
-        setSelectedAccounts([]);
-        setRefreshTrigger(prev => prev + 1);
-        setShowBulkDeleteDialog(false);
-      }} />
+        {viewMode === 'analytics' ? (
+          <AccountAnalyticsDashboard />
+        ) : (
+          <AccountTable showColumnCustomizer={showColumnCustomizer} setShowColumnCustomizer={setShowColumnCustomizer} showModal={showModal} setShowModal={setShowModal} selectedAccounts={selectedAccounts} setSelectedAccounts={setSelectedAccounts} key={refreshTrigger} onBulkDeleteComplete={() => {
+            setSelectedAccounts([]);
+            setRefreshTrigger(prev => prev + 1);
+            setShowBulkDeleteDialog(false);
+          }} />
+        )}
       </div>
 
       {/* Bulk Delete Confirmation Dialog */}

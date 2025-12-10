@@ -4,7 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { Edit, Trash2, ArrowUpDown, ArrowUp, ArrowDown, MoreHorizontal, UserPlus, Mail } from "lucide-react";
+import { Edit, Trash2, ArrowUpDown, ArrowUp, ArrowDown, MoreHorizontal, UserPlus, Mail, Eye } from "lucide-react";
 import { useUserDisplayNames } from "@/hooks/useUserDisplayNames";
 import { ContactColumnConfig } from "../ContactColumnCustomizer";
 import { supabase } from "@/integrations/supabase/client";
@@ -36,6 +36,7 @@ interface ContactTableBodyProps {
   selectedContacts: string[];
   setSelectedContacts: React.Dispatch<React.SetStateAction<string[]>>;
   onEdit: (contact: Contact) => void;
+  onView: (contact: Contact) => void;
   onDelete: (id: string) => void;
   searchTerm: string;
   onRefresh?: () => void;
@@ -51,6 +52,7 @@ export const ContactTableBody = ({
   selectedContacts,
   setSelectedContacts,
   onEdit,
+  onView,
   onDelete,
   searchTerm,
   onRefresh,
@@ -301,6 +303,15 @@ export const ContactTableBody = ({
                   <Button
                     variant="ghost"
                     size="sm"
+                    onClick={() => onView(contact)}
+                    className="h-8 w-8 p-0 hover:bg-muted"
+                    title="View contact details"
+                  >
+                    <Eye className="w-4 h-4" />
+                  </Button>
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => onEdit(contact)}
                     className="h-8 w-8 p-0 hover:bg-muted"
                     title="Edit contact"
@@ -356,7 +367,12 @@ export const ContactTableBody = ({
       <SendEmailModal
         open={emailModalOpen}
         onOpenChange={setEmailModalOpen}
-        contact={emailContact}
+        recipient={emailContact ? {
+          name: emailContact.contact_name,
+          email: emailContact.email,
+          company_name: emailContact.company_name,
+          position: emailContact.position,
+        } : null}
       />
     </div>
   );

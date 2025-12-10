@@ -10,11 +10,12 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Mail, Send, Loader2 } from "lucide-react";
 
-interface Contact {
-  contact_name: string;
+// Generic recipient interface that works with contacts, leads, and accounts
+export interface EmailRecipient {
+  name: string;
+  email?: string;
   company_name?: string;
   position?: string;
-  email?: string;
 }
 
 interface EmailTemplate {
@@ -27,10 +28,17 @@ interface EmailTemplate {
 interface SendEmailModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  contact: Contact | null;
+  recipient: EmailRecipient | null;
+  // Legacy prop for backwards compatibility
+  contact?: {
+    contact_name: string;
+    company_name?: string;
+    position?: string;
+    email?: string;
+  } | null;
 }
 
-export const SendEmailModal = ({ open, onOpenChange, contact }: SendEmailModalProps) => {
+export const SendEmailModal = ({ open, onOpenChange, recipient, contact }: SendEmailModalProps) => {
   const { toast } = useToast();
   const { user } = useAuth();
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
@@ -40,6 +48,14 @@ export const SendEmailModal = ({ open, onOpenChange, contact }: SendEmailModalPr
   const [isSending, setIsSending] = useState(false);
   
   const senderEmail = user?.email || "noreply@acmecrm.com";
+
+  // Use recipient or convert legacy contact prop
+  const emailRecipient: EmailRecipient | null = recipient || (contact ? {
+    name: contact.contact_name,
+    email: contact.email,
+    company_name: contact.company_name,
+    position: contact.position,
+  } : null);
 
   useEffect(() => {
     if (open) {
@@ -64,14 +80,15 @@ export const SendEmailModal = ({ open, onOpenChange, contact }: SendEmailModalPr
     }
   };
 
-  const replaceVariables = (text: string, contactData: Contact | null) => {
-    if (!contactData) return text;
+  const replaceVariables = (text: string, recipientData: EmailRecipient | null) => {
+    if (!recipientData) return text;
     
     return text
-      .replace(/\{\{contact_name\}\}/g, contactData.contact_name || '')
-      .replace(/\{\{company_name\}\}/g, contactData.company_name || '')
-      .replace(/\{\{position\}\}/g, contactData.position || '')
-      .replace(/\{\{email\}\}/g, contactData.email || '');
+      .replace(/\{\{contact_name\}\}/g, recipientData.name || '')
+      .replace(/\{\{name\}\}/g, recipientData.name || '')
+      .replace(/\{\{company_name\}\}/g, recipientData.company_name || '')
+      .replace(/\{\{position\}\}/g, recipientData.position || '')
+      .replace(/\{\{email\}\}/g, recipientData.email || '');
   };
 
   const handleTemplateSelect = (templateId: string) => {
@@ -85,16 +102,16 @@ export const SendEmailModal = ({ open, onOpenChange, contact }: SendEmailModalPr
 
     const template = templates.find(t => t.id === templateId);
     if (template) {
-      setSubject(replaceVariables(template.subject, contact));
-      setBody(replaceVariables(template.body, contact));
+      setSubject(replaceVariables(template.subject, emailRecipient));
+      setBody(replaceVariables(template.body, emailRecipient));
     }
   };
 
   const handleSendEmail = async () => {
-    if (!contact?.email) {
+    if (!emailRecipient?.email) {
       toast({
         title: "No email address",
-        description: "This contact doesn't have an email address",
+        description: "This recipient doesn't have an email address",
         variant: "destructive",
       });
       return;
@@ -114,8 +131,8 @@ export const SendEmailModal = ({ open, onOpenChange, contact }: SendEmailModalPr
     try {
       const { data, error } = await supabase.functions.invoke('send-email', {
         body: {
-          to: contact.email,
-          toName: contact.contact_name,
+          to: emailRecipient.email,
+          toName: emailRecipient.name,
           subject: subject.trim(),
           body: body.trim(),
           from: senderEmail,
@@ -130,7 +147,7 @@ export const SendEmailModal = ({ open, onOpenChange, contact }: SendEmailModalPr
 
       toast({
         title: "Email Sent",
-        description: `Email successfully sent to ${contact.contact_name}`,
+        description: `Email successfully sent to ${emailRecipient.name}`,
       });
       
       onOpenChange(false);
@@ -146,7 +163,7 @@ export const SendEmailModal = ({ open, onOpenChange, contact }: SendEmailModalPr
     }
   };
 
-  if (!contact) return null;
+  if (!emailRecipient) return null;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -154,7 +171,7 @@ export const SendEmailModal = ({ open, onOpenChange, contact }: SendEmailModalPr
         <DialogHeader>
           <DialogTitle className="flex items-center gap-2">
             <Mail className="h-5 w-5" />
-            Send Email to {contact.contact_name}
+            Send Email to {emailRecipient.name}
           </DialogTitle>
         </DialogHeader>
         
@@ -166,7 +183,7 @@ export const SendEmailModal = ({ open, onOpenChange, contact }: SendEmailModalPr
             </div>
             <div className="p-3 bg-muted/50 rounded-lg">
               <Label className="text-sm text-muted-foreground">To:</Label>
-              <p className="font-medium text-sm truncate">{contact.email || "No email address"}</p>
+              <p className="font-medium text-sm truncate">{emailRecipient.email || "No email address"}</p>
             </div>
           </div>
 
@@ -219,7 +236,7 @@ export const SendEmailModal = ({ open, onOpenChange, contact }: SendEmailModalPr
             </Button>
             <Button 
               onClick={handleSendEmail} 
-              disabled={!contact?.email || isSending}
+              disabled={!emailRecipient?.email || isSending}
               className="gap-2"
             >
               {isSending ? (

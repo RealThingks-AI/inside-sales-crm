@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Search, Edit, Trash2, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, RefreshCw, ListTodo } from "lucide-react";
+import { Search, Edit, Trash2, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, RefreshCw, ListTodo, Mail } from "lucide-react";
 import { LeadModal } from "./LeadModal";
 import { LeadColumnCustomizer, LeadColumnConfig } from "./LeadColumnCustomizer";
 import { LeadStatusFilter } from "./LeadStatusFilter";
@@ -18,6 +18,7 @@ import { ConvertToDealModal } from "./ConvertToDealModal";
 import { LeadActionItemsModal } from "./LeadActionItemsModal";
 import { LeadDeleteConfirmDialog } from "./LeadDeleteConfirmDialog";
 import { AccountViewModal } from "./AccountViewModal";
+import { SendEmailModal, EmailRecipient } from "./SendEmailModal";
 
 interface Lead {
   id: string;
@@ -125,6 +126,8 @@ const LeadTable = ({
   const [selectedLeadForActions, setSelectedLeadForActions] = useState<Lead | null>(null);
   const [viewAccountId, setViewAccountId] = useState<string | null>(null);
   const [accountViewOpen, setAccountViewOpen] = useState(false);
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [emailRecipient, setEmailRecipient] = useState<EmailRecipient | null>(null);
 
   useEffect(() => {
     fetchLeads();
@@ -431,16 +434,34 @@ const LeadTable = ({
                     <TableCell className="w-48 px-4 py-3">
                       <div className="flex items-center justify-center gap-1">
                         <Button variant="ghost" size="sm" onClick={() => {
-                    setEditingLead(lead);
-                    setShowModal(true);
-                  }} title="Edit lead" className="h-8 w-8 p-0">
+                          setEditingLead(lead);
+                          setShowModal(true);
+                        }} title="Edit lead" className="h-8 w-8 p-0">
                           <Edit className="w-4 h-4" />
                         </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm" 
+                          onClick={() => {
+                            setEmailRecipient({
+                              name: lead.lead_name,
+                              email: lead.email,
+                              company_name: lead.company_name || lead.account_company_name,
+                              position: lead.position,
+                            });
+                            setEmailModalOpen(true);
+                          }} 
+                          title="Send email" 
+                          className="h-8 w-8 p-0 text-primary"
+                          disabled={!lead.email}
+                        >
+                          <Mail className="w-4 h-4" />
+                        </Button>
                         <Button variant="ghost" size="sm" onClick={() => {
-                    console.log('Setting lead to delete:', lead);
-                    setLeadToDelete(lead);
-                    setShowDeleteDialog(true);
-                  }} title="Delete lead" className="h-8 w-8 p-0">
+                          console.log('Setting lead to delete:', lead);
+                          setLeadToDelete(lead);
+                          setShowDeleteDialog(true);
+                        }} title="Delete lead" className="h-8 w-8 p-0">
                           <Trash2 className="w-4 h-4" />
                         </Button>
                         {userRole !== 'user' && (
@@ -500,6 +521,12 @@ const LeadTable = ({
         open={accountViewOpen} 
         onOpenChange={setAccountViewOpen} 
         accountId={viewAccountId} 
+      />
+
+      <SendEmailModal
+        open={emailModalOpen}
+        onOpenChange={setEmailModalOpen}
+        recipient={emailRecipient}
       />
     </div>;
 };
