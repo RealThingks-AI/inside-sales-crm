@@ -1,11 +1,17 @@
+import { useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { useNavigate } from "react-router-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Users, FileText, Briefcase, TrendingUp, Clock, CheckCircle2, ArrowRight, Plus, Building2, Calendar, ListTodo } from "lucide-react";
+import { Users, FileText, Briefcase, TrendingUp, Clock, CheckCircle2, Plus, Building2, Calendar, ListTodo } from "lucide-react";
+import { LeadModal } from "@/components/LeadModal";
+import { ContactModal } from "@/components/ContactModal";
+import { AccountModal } from "@/components/AccountModal";
+import { MeetingModal } from "@/components/MeetingModal";
+import { TaskModal } from "@/components/tasks/TaskModal";
 
 const useUserProfile = (userId: string | undefined) => {
   return useQuery({
@@ -55,9 +61,17 @@ const usePagePermissions = () => {
 const UserDashboard = () => {
   const { user } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
   const { data: userName } = useUserProfile(user?.id);
   const { data: userRole } = useUserRole(user?.id);
   const { data: pagePermissions } = usePagePermissions();
+
+  // Modal states
+  const [isLeadModalOpen, setIsLeadModalOpen] = useState(false);
+  const [isContactModalOpen, setIsContactModalOpen] = useState(false);
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [isMeetingModalOpen, setIsMeetingModalOpen] = useState(false);
+  const [isTaskModalOpen, setIsTaskModalOpen] = useState(false);
 
   // Check if user has access to a specific route
   const hasAccess = (route: string) => {
@@ -215,24 +229,15 @@ const UserDashboard = () => {
   }
 
   // Build quick actions based on access
-  const quickActions = [];
+  const quickActions: { label: string; icon: typeof Plus; onClick: () => void }[] = [];
   if (canAccessLeads) {
-    quickActions.push({ label: 'Add New Lead', icon: Plus, route: '/leads' });
-  }
-  if (canAccessContacts) {
-    quickActions.push({ label: 'Add New Contact', icon: Plus, route: '/contacts' });
-  }
-  if (canAccessAccounts) {
-    quickActions.push({ label: 'Add New Account', icon: Plus, route: '/accounts' });
-  }
-  if (canAccessMeetings) {
-    quickActions.push({ label: 'Schedule Meeting', icon: Plus, route: '/meetings' });
+    quickActions.push({ label: 'Add Lead', icon: Plus, onClick: () => setIsLeadModalOpen(true) });
   }
   if (canAccessTasks) {
-    quickActions.push({ label: 'Create Task', icon: Plus, route: '/tasks' });
+    quickActions.push({ label: 'Add Task', icon: Plus, onClick: () => setIsTaskModalOpen(true) });
   }
-  if (canAccessDeals) {
-    quickActions.push({ label: 'Create New Deal', icon: Plus, route: '/deals' });
+  if (canAccessContacts) {
+    quickActions.push({ label: 'Add Contact', icon: Plus, onClick: () => setIsContactModalOpen(true) });
   }
 
   return (
@@ -419,22 +424,20 @@ const UserDashboard = () => {
         )}
 
         <Card>
-          <CardHeader>
-            <CardTitle>Quick Actions</CardTitle>
+          <CardHeader className="pb-3">
+            <CardTitle className="text-base">Quick Actions</CardTitle>
           </CardHeader>
-          <CardContent className="space-y-3">
-            {quickActions.slice(0, 4).map((action) => (
+          <CardContent className="flex flex-wrap gap-2">
+            {quickActions.map((action, index) => (
               <Button
-                key={action.route}
+                key={index}
                 variant="outline"
-                className="w-full justify-between"
-                onClick={() => navigate(action.route)}
+                size="sm"
+                className="gap-1.5"
+                onClick={action.onClick}
               >
-                <span className="flex items-center gap-2">
-                  <action.icon className="w-4 h-4" />
-                  {action.label}
-                </span>
-                <ArrowRight className="w-4 h-4" />
+                <action.icon className="w-3.5 h-3.5" />
+                {action.label}
               </Button>
             ))}
           </CardContent>
@@ -498,6 +501,38 @@ const UserDashboard = () => {
           </CardContent>
         </Card>
       )}
+
+      {/* Modals */}
+      <LeadModal
+        open={isLeadModalOpen}
+        onOpenChange={setIsLeadModalOpen}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['user-leads-count'] });
+          setIsLeadModalOpen(false);
+        }}
+      />
+      <ContactModal
+        open={isContactModalOpen}
+        onOpenChange={setIsContactModalOpen}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['user-contacts-count'] });
+          setIsContactModalOpen(false);
+        }}
+      />
+      <TaskModal
+        open={isTaskModalOpen}
+        onOpenChange={setIsTaskModalOpen}
+        onSubmit={async (data) => {
+          const { data: result, error } = await supabase.from('tasks').insert([{
+            ...data,
+            created_by: user?.id
+          }]).select().single();
+          if (!error) {
+            queryClient.invalidateQueries({ queryKey: ['user-tasks-count'] });
+          }
+          return result;
+        }}
+      />
     </div>
   );
 };
