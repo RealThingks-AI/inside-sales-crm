@@ -117,7 +117,8 @@ const Settings = () => {
   const handleSectionClick = (sectionId: string) => {
     setExpandedSection(expandedSection === sectionId ? null : sectionId);
   };
-  const handleItemClick = (itemId: string, sectionId: string) => {
+  const handleItemClick = (e: React.MouseEvent, itemId: string, sectionId: string) => {
+    e.stopPropagation();
     setActiveTab(itemId);
     setExpandedSection(sectionId);
   };
@@ -194,7 +195,7 @@ const Settings = () => {
                       {visibleItems.map(item => {
                   const Icon = item.icon;
                   const isActive = activeTab === item.id;
-                  return <button key={item.id} onClick={() => handleItemClick(item.id, section.id)} className={cn("w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors", isActive ? "bg-primary/10 text-primary font-medium" : "text-foreground hover:bg-muted/50")}>
+                  return <button key={item.id} onClick={(e) => handleItemClick(e, item.id, section.id)} className={cn("w-full flex items-center gap-3 px-4 py-2.5 text-sm transition-colors", isActive ? "bg-primary/10 text-primary font-medium" : "text-foreground hover:bg-muted/50")}>
                             
                             <span>{item.label}</span>
                           </button>;
