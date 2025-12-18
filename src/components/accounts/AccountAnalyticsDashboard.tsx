@@ -3,30 +3,8 @@ import { supabase } from "@/integrations/supabase/client";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { 
-  Building2, 
-  Users, 
-  Briefcase, 
-  TrendingUp, 
-  Activity,
-  DollarSign,
-  BarChart3,
-  PieChart as PieChartIcon,
-  Loader2
-} from "lucide-react";
-import { 
-  BarChart, 
-  Bar, 
-  XAxis, 
-  YAxis, 
-  CartesianGrid, 
-  Tooltip, 
-  ResponsiveContainer,
-  PieChart,
-  Pie,
-  Cell
-} from "recharts";
-
+import { Building2, Users, Briefcase, TrendingUp, Activity, DollarSign, BarChart3, PieChart as PieChartIcon, Loader2 } from "lucide-react";
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from "recharts";
 interface Account {
   id: string;
   company_name: string;
@@ -36,23 +14,19 @@ interface Account {
   industry?: string;
   region?: string;
 }
-
 export const AccountAnalyticsDashboard = () => {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
-
   useEffect(() => {
     fetchAccounts();
   }, []);
-
   const fetchAccounts = async () => {
     setLoading(true);
     try {
-      const { data, error } = await supabase
-        .from('accounts')
-        .select('id, company_name, status, segment, score, industry, region')
-        .order('company_name');
-
+      const {
+        data,
+        error
+      } = await supabase.from('accounts').select('id, company_name, status, segment, score, industry, region').order('company_name');
       if (error) throw error;
       setAccounts(data || []);
     } catch (error) {
@@ -65,14 +39,15 @@ export const AccountAnalyticsDashboard = () => {
   // Calculate stats
   const stats = useMemo(() => {
     const totalAccounts = accounts.length;
-    const avgScore = accounts.length > 0 
-      ? Math.round(accounts.reduce((sum, a) => sum + (a.score || 0), 0) / accounts.length)
-      : 0;
-    
+    const avgScore = accounts.length > 0 ? Math.round(accounts.reduce((sum, a) => sum + (a.score || 0), 0) / accounts.length) : 0;
     const activeAccounts = accounts.filter(a => a.status === 'Active').length;
     const newAccounts = accounts.filter(a => a.status === 'New').length;
-
-    return { totalAccounts, avgScore, activeAccounts, newAccounts };
+    return {
+      totalAccounts,
+      avgScore,
+      activeAccounts,
+      newAccounts
+    };
   }, [accounts]);
 
   // Segment distribution
@@ -82,7 +57,10 @@ export const AccountAnalyticsDashboard = () => {
       const seg = a.segment || 'Prospect';
       segments[seg] = (segments[seg] || 0) + 1;
     });
-    return Object.entries(segments).map(([name, value]) => ({ name, value }));
+    return Object.entries(segments).map(([name, value]) => ({
+      name,
+      value
+    }));
   }, [accounts]);
 
   // Industry distribution
@@ -92,29 +70,49 @@ export const AccountAnalyticsDashboard = () => {
       const ind = a.industry || 'Unknown';
       industries[ind] = (industries[ind] || 0) + 1;
     });
-    return Object.entries(industries)
-      .map(([name, value]) => ({ name, value }))
-      .sort((a, b) => b.value - a.value)
-      .slice(0, 8);
+    return Object.entries(industries).map(([name, value]) => ({
+      name,
+      value
+    })).sort((a, b) => b.value - a.value).slice(0, 8);
   }, [accounts]);
 
   // Score distribution
   const scoreData = useMemo(() => {
-    const ranges = [
-      { range: '0-20', min: 0, max: 20, count: 0 },
-      { range: '21-40', min: 21, max: 40, count: 0 },
-      { range: '41-60', min: 41, max: 60, count: 0 },
-      { range: '61-80', min: 61, max: 80, count: 0 },
-      { range: '81-100', min: 81, max: 100, count: 0 },
-    ];
-    
+    const ranges = [{
+      range: '0-20',
+      min: 0,
+      max: 20,
+      count: 0
+    }, {
+      range: '21-40',
+      min: 21,
+      max: 40,
+      count: 0
+    }, {
+      range: '41-60',
+      min: 41,
+      max: 60,
+      count: 0
+    }, {
+      range: '61-80',
+      min: 61,
+      max: 80,
+      count: 0
+    }, {
+      range: '81-100',
+      min: 81,
+      max: 100,
+      count: 0
+    }];
     accounts.forEach(a => {
       const score = a.score || 0;
       const range = ranges.find(r => score >= r.min && score <= r.max);
       if (range) range.count++;
     });
-    
-    return ranges.map(r => ({ name: r.range, count: r.count }));
+    return ranges.map(r => ({
+      name: r.range,
+      count: r.count
+    }));
   }, [accounts]);
 
   // Status distribution
@@ -124,28 +122,20 @@ export const AccountAnalyticsDashboard = () => {
       const status = a.status || 'New';
       statuses[status] = (statuses[status] || 0) + 1;
     });
-    return Object.entries(statuses).map(([name, value]) => ({ name, value }));
+    return Object.entries(statuses).map(([name, value]) => ({
+      name,
+      value
+    }));
   }, [accounts]);
-
   const COLORS = ['#8b5cf6', '#3b82f6', '#22c55e', '#eab308', '#ef4444', '#ec4899', '#06b6d4', '#f97316'];
-
   if (loading) {
-    return (
-      <div className="flex items-center justify-center h-64">
+    return <div className="flex items-center justify-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
+      </div>;
   }
-
-  return (
-    <div className="space-y-6">
+  return <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <h2 className="text-xl font-semibold flex items-center gap-2">
-          <BarChart3 className="h-5 w-5" />
-          Account Analytics
-        </h2>
-      </div>
+      
 
       {/* Stats Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -209,38 +199,23 @@ export const AccountAnalyticsDashboard = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {segmentData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={250}>
+            {segmentData.length > 0 ? <ResponsiveContainer width="100%" height={250}>
                 <PieChart>
-                  <Pie
-                    data={segmentData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={90}
-                    paddingAngle={2}
-                    dataKey="value"
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    labelLine={false}
-                  >
-                    {segmentData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
+                  <Pie data={segmentData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2} dataKey="value" label={({
+                name,
+                percent
+              }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                    {segmentData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                   </Pie>
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'hsl(var(--popover))', 
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: '8px'
-                    }}
-                  />
+                  <Tooltip contentStyle={{
+                backgroundColor: 'hsl(var(--popover))',
+                border: '1px solid hsl(var(--border))',
+                borderRadius: '8px'
+              }} />
                 </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex items-center justify-center h-[250px] text-muted-foreground">
+              </ResponsiveContainer> : <div className="flex items-center justify-center h-[250px] text-muted-foreground">
                 No data available
-              </div>
-            )}
+              </div>}
           </CardContent>
         </Card>
 
@@ -253,38 +228,23 @@ export const AccountAnalyticsDashboard = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {statusData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={250}>
+            {statusData.length > 0 ? <ResponsiveContainer width="100%" height={250}>
                 <PieChart>
-                  <Pie
-                    data={statusData}
-                    cx="50%"
-                    cy="50%"
-                    innerRadius={60}
-                    outerRadius={90}
-                    paddingAngle={2}
-                    dataKey="value"
-                    label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                    labelLine={false}
-                  >
-                    {statusData.map((entry, index) => (
-                      <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                    ))}
+                  <Pie data={statusData} cx="50%" cy="50%" innerRadius={60} outerRadius={90} paddingAngle={2} dataKey="value" label={({
+                name,
+                percent
+              }) => `${name} ${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                    {statusData.map((entry, index) => <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />)}
                   </Pie>
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'hsl(var(--popover))', 
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: '8px'
-                    }}
-                  />
+                  <Tooltip contentStyle={{
+                backgroundColor: 'hsl(var(--popover))',
+                border: '1px solid hsl(var(--border))',
+                borderRadius: '8px'
+              }} />
                 </PieChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex items-center justify-center h-[250px] text-muted-foreground">
+              </ResponsiveContainer> : <div className="flex items-center justify-center h-[250px] text-muted-foreground">
                 No data available
-              </div>
-            )}
+              </div>}
           </CardContent>
         </Card>
       </div>
@@ -300,27 +260,21 @@ export const AccountAnalyticsDashboard = () => {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            {industryData.length > 0 ? (
-              <ResponsiveContainer width="100%" height={250}>
+            {industryData.length > 0 ? <ResponsiveContainer width="100%" height={250}>
                 <BarChart data={industryData} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                   <XAxis type="number" className="text-xs" />
                   <YAxis dataKey="name" type="category" width={100} className="text-xs" />
-                  <Tooltip 
-                    contentStyle={{ 
-                      backgroundColor: 'hsl(var(--popover))', 
-                      border: '1px solid hsl(var(--border))',
-                      borderRadius: '8px'
-                    }}
-                  />
+                  <Tooltip contentStyle={{
+                backgroundColor: 'hsl(var(--popover))',
+                border: '1px solid hsl(var(--border))',
+                borderRadius: '8px'
+              }} />
                   <Bar dataKey="value" fill="hsl(var(--primary))" radius={[0, 4, 4, 0]} />
                 </BarChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex items-center justify-center h-[250px] text-muted-foreground">
+              </ResponsiveContainer> : <div className="flex items-center justify-center h-[250px] text-muted-foreground">
                 No data available
-              </div>
-            )}
+              </div>}
           </CardContent>
         </Card>
 
@@ -338,19 +292,16 @@ export const AccountAnalyticsDashboard = () => {
                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                 <XAxis dataKey="name" className="text-xs" />
                 <YAxis className="text-xs" />
-                <Tooltip 
-                  contentStyle={{ 
-                    backgroundColor: 'hsl(var(--popover))', 
-                    border: '1px solid hsl(var(--border))',
-                    borderRadius: '8px'
-                  }}
-                />
+                <Tooltip contentStyle={{
+                backgroundColor: 'hsl(var(--popover))',
+                border: '1px solid hsl(var(--border))',
+                borderRadius: '8px'
+              }} />
                 <Bar dataKey="count" fill="hsl(var(--primary))" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </CardContent>
         </Card>
       </div>
-    </div>
-  );
+    </div>;
 };
