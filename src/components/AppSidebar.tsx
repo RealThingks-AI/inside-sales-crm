@@ -258,133 +258,108 @@ export function AppSidebar({ isFixed = false, isOpen, onToggle }: AppSidebarProp
       </div>
 
       {/* Bottom Section */}
-      <div className="border-t border-sidebar-border p-1.5 space-y-1.5">
+      <div className="border-t border-sidebar-border p-2 space-y-2">
         {/* Notification Bell */}
-        <div>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                onClick={handleNotificationClick}
-                className={`flex items-center justify-center h-10 w-full rounded-lg transition-colors font-medium ${
-                  currentPath === '/notifications' 
-                    ? 'text-sidebar-primary bg-sidebar-accent' 
-                    : 'text-sidebar-foreground/70 hover:text-sidebar-primary hover:bg-sidebar-accent/50'
-                }`}
-              >
-                <div className={`h-10 flex items-center justify-center flex-shrink-0 ${sidebarOpen ? 'w-auto pl-2' : 'w-full'}`}>
-                  <Bell className="w-5 h-5" />
-                </div>
-                <div 
-                  className={`transition-all duration-300 overflow-hidden whitespace-nowrap ${
-                    sidebarOpen ? 'opacity-100 w-auto ml-0' : 'opacity-0 w-0 ml-0'
-                  }`}
-                  style={{ 
-                    fontFamily: 'Inter, system-ui, sans-serif',
-                    fontSize: '13px'
-                  }}
-                >
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={handleNotificationClick}
+              className={`
+                flex items-center h-10 rounded-lg transition-colors font-medium
+                ${sidebarOpen ? 'px-3 gap-3' : 'justify-center w-10 mx-auto'}
+                ${currentPath === '/notifications' 
+                  ? 'text-sidebar-primary bg-sidebar-accent' 
+                  : 'text-sidebar-foreground/70 hover:text-sidebar-primary hover:bg-sidebar-accent/50'
+                }
+              `}
+            >
+              <Bell className="w-5 h-5 flex-shrink-0" />
+              {sidebarOpen && (
+                <span className="text-sm font-medium whitespace-nowrap" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
                   Notifications
-                </div>
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side={sidebarOpen ? "bottom" : "right"}>
-              <p>Notifications</p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
+                </span>
+              )}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="right">
+            <p>Notifications</p>
+          </TooltipContent>
+        </Tooltip>
 
         {/* Theme Toggle */}
-        <div>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                onClick={handleThemeToggle}
-                className="flex items-center justify-center h-10 w-full rounded-lg transition-colors text-sidebar-foreground/70 hover:text-sidebar-primary hover:bg-sidebar-accent/50 font-medium"
-              >
-                <div className={`h-10 flex items-center justify-center flex-shrink-0 ${sidebarOpen ? 'w-auto pl-2' : 'w-full'}`}>
-                  {(() => {
-                    const ThemeIcon = getThemeIcon();
-                    return <ThemeIcon className="w-5 h-5" />;
-                  })()}
-                </div>
-                <div 
-                  className={`transition-all duration-300 overflow-hidden whitespace-nowrap ${
-                    sidebarOpen ? 'opacity-100 w-auto ml-0' : 'opacity-0 w-0 ml-0'
-                  }`}
-                  style={{ 
-                    fontFamily: 'Inter, system-ui, sans-serif',
-                    fontSize: '13px'
-                  }}
-                >
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={handleThemeToggle}
+              className={`
+                flex items-center h-10 rounded-lg transition-colors font-medium
+                ${sidebarOpen ? 'px-3 gap-3' : 'justify-center w-10 mx-auto'}
+                text-sidebar-foreground/70 hover:text-sidebar-primary hover:bg-sidebar-accent/50
+              `}
+            >
+              {(() => {
+                const ThemeIcon = getThemeIcon();
+                return <ThemeIcon className="w-5 h-5 flex-shrink-0" />;
+              })()}
+              {sidebarOpen && (
+                <span className="text-sm font-medium whitespace-nowrap" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
                   Theme
-                </div>
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side={sidebarOpen ? "bottom" : "right"}>
-              <p>{getThemeTooltipText()}</p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
+                </span>
+              )}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="right">
+            <p>{getThemeTooltipText()}</p>
+          </TooltipContent>
+        </Tooltip>
 
         {/* Pin Toggle Button */}
-        <div>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                onClick={togglePin}
-                className="flex items-center justify-center h-10 w-full rounded-lg transition-colors text-sidebar-foreground/70 hover:text-sidebar-primary hover:bg-sidebar-accent/50 font-medium"
-              >
-                <div className={`h-10 flex items-center justify-center flex-shrink-0 ${sidebarOpen ? 'w-auto pl-2' : 'w-full'}`}>
-                  {sidebarOpen ? <Pin className="w-5 h-5" /> : <PinOff className="w-5 h-5" />}
-                </div>
-                <div 
-                  className={`transition-all duration-300 overflow-hidden whitespace-nowrap ${
-                    sidebarOpen ? 'opacity-100 w-auto ml-0' : 'opacity-0 w-0 ml-0'
-                  }`}
-                  style={{ 
-                    fontFamily: 'Inter, system-ui, sans-serif',
-                    fontSize: '13px'
-                  }}
-                >
-                  {sidebarOpen ? 'Collapse' : 'Expand'}
-                </div>
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side={sidebarOpen ? "bottom" : "right"}>
-              <p>{sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}</p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={togglePin}
+              className={`
+                flex items-center h-10 rounded-lg transition-colors font-medium
+                ${sidebarOpen ? 'px-3 gap-3' : 'justify-center w-10 mx-auto'}
+                text-sidebar-foreground/70 hover:text-sidebar-primary hover:bg-sidebar-accent/50
+              `}
+            >
+              {sidebarOpen ? <Pin className="w-5 h-5 flex-shrink-0" /> : <PinOff className="w-5 h-5 flex-shrink-0" />}
+              {sidebarOpen && (
+                <span className="text-sm font-medium whitespace-nowrap" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
+                  Collapse
+                </span>
+              )}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="right">
+            <p>{sidebarOpen ? 'Collapse sidebar' : 'Expand sidebar'}</p>
+          </TooltipContent>
+        </Tooltip>
 
         {/* User & Sign Out */}
-        <div>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                onClick={handleSignOutClick}
-                className="flex items-center justify-center h-10 w-full rounded-lg transition-colors text-sidebar-foreground/70 hover:text-sidebar-primary hover:bg-sidebar-accent/50 font-medium"
-              >
-                <div className={`h-10 flex items-center justify-center flex-shrink-0 ${sidebarOpen ? 'w-auto pl-2' : 'w-full'}`}>
-                  <LogOut className="w-5 h-5" />
-                </div>
-                <div 
-                  className={`transition-all duration-300 overflow-hidden whitespace-nowrap ${
-                    sidebarOpen ? 'opacity-100 w-auto ml-0' : 'opacity-0 w-0 ml-0'
-                  }`}
-                  style={{ 
-                    fontFamily: 'Inter, system-ui, sans-serif',
-                    fontSize: '13px'
-                  }}
-                >
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <button
+              onClick={handleSignOutClick}
+              className={`
+                flex items-center h-10 rounded-lg transition-colors font-medium
+                ${sidebarOpen ? 'px-3 gap-3' : 'justify-center w-10 mx-auto'}
+                text-sidebar-foreground/70 hover:text-sidebar-primary hover:bg-sidebar-accent/50
+              `}
+            >
+              <LogOut className="w-5 h-5 flex-shrink-0" />
+              {sidebarOpen && (
+                <span className="text-sm font-medium whitespace-nowrap" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
                   {getUserDisplayName()}
-                </div>
-              </button>
-            </TooltipTrigger>
-            <TooltipContent side={sidebarOpen ? "bottom" : "right"}>
-              <p>Sign Out</p>
-            </TooltipContent>
-          </Tooltip>
-        </div>
+                </span>
+              )}
+            </button>
+          </TooltipTrigger>
+          <TooltipContent side="right">
+            <p>Sign Out</p>
+          </TooltipContent>
+        </Tooltip>
       </div>
 
       {/* Sign Out Confirmation Dialog */}
