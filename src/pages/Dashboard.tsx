@@ -28,10 +28,10 @@ const Dashboard = () => {
     return <div className="h-screen flex flex-col bg-background overflow-hidden">
         {/* Fixed Header */}
         <div className="flex-shrink-0 bg-background">
-          <div className="px-6 h-16 flex items-center border-b w-full">
+          <div className="px-5 h-14 flex items-center border-b w-full">
             <div className="flex items-center justify-between w-full">
               <div className="min-w-0 flex-1">
-                <h1 className="font-semibold text-foreground text-2xl">Revenue Analytics</h1>
+                <h1 className="font-semibold text-foreground text-xl">Revenue Analytics</h1>
               </div>
               <div className="flex items-center gap-4">
                 <NotificationBell placement="down" size="small" />

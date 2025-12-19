@@ -177,26 +177,26 @@ export function AppSidebar({ isFixed = false, isOpen, onToggle }: AppSidebarProp
         isFixed ? 'relative' : ''
       }`}
       style={{ 
-        width: sidebarOpen ? '200px' : '64px',
-        minWidth: sidebarOpen ? '200px' : '64px',
-        maxWidth: sidebarOpen ? '200px' : '64px'
+        width: sidebarOpen ? '160px' : '48px',
+        minWidth: sidebarOpen ? '160px' : '48px',
+        maxWidth: sidebarOpen ? '160px' : '48px'
       }}
     >
       {/* Header */}
-      <div className="flex items-center border-b border-sidebar-border relative h-16 px-4">
+      <div className="flex items-center border-b border-sidebar-border relative h-14 px-3">
         <div 
           className="flex items-center cursor-pointer"
           onClick={handleLogoClick}
         >
-          <div className="w-8 h-8 flex items-center justify-center flex-shrink-0">
+          <div className="w-7 h-7 flex items-center justify-center flex-shrink-0">
             <img 
               src="/lovable-uploads/12bdcc4a-a1c8-4ccf-ba6a-931fd566d3c8.png" 
               alt="Logo" 
-              className="w-8 h-8 object-contain"
+              className="w-7 h-7 object-contain"
             />
           </div>
           <div 
-            className={`ml-3 text-sidebar-foreground font-semibold text-lg whitespace-nowrap transition-all duration-300 overflow-hidden ${
+            className={`ml-2 text-sidebar-foreground font-semibold text-base whitespace-nowrap transition-all duration-300 overflow-hidden ${
               sidebarOpen ? 'opacity-100 w-auto' : 'opacity-0 w-0'
             }`}
             style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
@@ -208,7 +208,7 @@ export function AppSidebar({ isFixed = false, isOpen, onToggle }: AppSidebarProp
 
       {/* Menu Items */}
       <div className="flex-1 py-4">
-        <nav className="space-y-1 px-3">
+        <nav className="space-y-1.5 px-1.5">
           {menuItems.map((item) => {
             const active = isActive(item.url);
             const menuButton = (
@@ -222,7 +222,7 @@ export function AppSidebar({ isFixed = false, isOpen, onToggle }: AppSidebarProp
                   }
                 `}
               >
-                <div className="w-10 h-10 flex items-center justify-center flex-shrink-0">
+                <div className="w-full h-10 flex items-center justify-center flex-shrink-0" style={{ width: sidebarOpen ? 'auto' : '100%', paddingLeft: sidebarOpen ? '8px' : '0' }}>
                   <item.icon className="w-5 h-5" />
                 </div>
                 <div 
@@ -263,20 +263,20 @@ export function AppSidebar({ isFixed = false, isOpen, onToggle }: AppSidebarProp
       </div>
 
       {/* Bottom Section */}
-      <div className="border-t border-sidebar-border p-3 space-y-1">
+      <div className="border-t border-sidebar-border p-1.5 space-y-1.5">
         {/* Notification Bell */}
         <div>
           <Tooltip>
             <TooltipTrigger asChild>
               <button
                 onClick={handleNotificationClick}
-                className={`flex items-center h-10 w-full rounded-lg transition-colors font-medium ${
+                className={`flex items-center justify-center h-10 w-full rounded-lg transition-colors font-medium ${
                   currentPath === '/notifications' 
                     ? 'text-sidebar-primary bg-sidebar-accent' 
                     : 'text-sidebar-foreground/70 hover:text-sidebar-primary hover:bg-sidebar-accent/50'
                 }`}
               >
-                <div className="w-10 h-10 flex items-center justify-center flex-shrink-0">
+                <div className={`h-10 flex items-center justify-center flex-shrink-0 ${sidebarOpen ? 'w-auto pl-2' : 'w-full'}`}>
                   <Bell className="w-5 h-5" />
                 </div>
                 <div 
@@ -285,7 +285,7 @@ export function AppSidebar({ isFixed = false, isOpen, onToggle }: AppSidebarProp
                   }`}
                   style={{ 
                     fontFamily: 'Inter, system-ui, sans-serif',
-                    fontSize: '14px'
+                    fontSize: '13px'
                   }}
                 >
                   Notifications
@@ -304,9 +304,9 @@ export function AppSidebar({ isFixed = false, isOpen, onToggle }: AppSidebarProp
             <TooltipTrigger asChild>
               <button
                 onClick={handleThemeToggle}
-                className="flex items-center h-10 w-full rounded-lg transition-colors text-sidebar-foreground/70 hover:text-sidebar-primary hover:bg-sidebar-accent/50 font-medium"
+                className="flex items-center justify-center h-10 w-full rounded-lg transition-colors text-sidebar-foreground/70 hover:text-sidebar-primary hover:bg-sidebar-accent/50 font-medium"
               >
-                <div className="w-10 h-10 flex items-center justify-center flex-shrink-0">
+                <div className={`h-10 flex items-center justify-center flex-shrink-0 ${sidebarOpen ? 'w-auto pl-2' : 'w-full'}`}>
                   {(() => {
                     const ThemeIcon = getThemeIcon();
                     return <ThemeIcon className="w-5 h-5" />;
@@ -318,7 +318,7 @@ export function AppSidebar({ isFixed = false, isOpen, onToggle }: AppSidebarProp
                   }`}
                   style={{ 
                     fontFamily: 'Inter, system-ui, sans-serif',
-                    fontSize: '14px'
+                    fontSize: '13px'
                   }}
                 >
                   Theme
@@ -337,9 +337,9 @@ export function AppSidebar({ isFixed = false, isOpen, onToggle }: AppSidebarProp
             <TooltipTrigger asChild>
               <button
                 onClick={togglePin}
-                className="flex items-center h-10 w-full rounded-lg transition-colors text-sidebar-foreground/70 hover:text-sidebar-primary hover:bg-sidebar-accent/50 font-medium"
+                className="flex items-center justify-center h-10 w-full rounded-lg transition-colors text-sidebar-foreground/70 hover:text-sidebar-primary hover:bg-sidebar-accent/50 font-medium"
               >
-                <div className="w-10 h-10 flex items-center justify-center flex-shrink-0">
+                <div className={`h-10 flex items-center justify-center flex-shrink-0 ${sidebarOpen ? 'w-auto pl-2' : 'w-full'}`}>
                   {sidebarOpen ? <Pin className="w-5 h-5" /> : <PinOff className="w-5 h-5" />}
                 </div>
                 <div 
@@ -348,7 +348,7 @@ export function AppSidebar({ isFixed = false, isOpen, onToggle }: AppSidebarProp
                   }`}
                   style={{ 
                     fontFamily: 'Inter, system-ui, sans-serif',
-                    fontSize: '14px'
+                    fontSize: '13px'
                   }}
                 >
                   {sidebarOpen ? 'Collapse' : 'Expand'}
@@ -367,9 +367,9 @@ export function AppSidebar({ isFixed = false, isOpen, onToggle }: AppSidebarProp
             <TooltipTrigger asChild>
               <button
                 onClick={handleSignOutClick}
-                className="flex items-center h-10 w-full rounded-lg transition-colors text-sidebar-foreground/70 hover:text-sidebar-primary hover:bg-sidebar-accent/50 font-medium"
+                className="flex items-center justify-center h-10 w-full rounded-lg transition-colors text-sidebar-foreground/70 hover:text-sidebar-primary hover:bg-sidebar-accent/50 font-medium"
               >
-                <div className="w-10 h-10 flex items-center justify-center flex-shrink-0">
+                <div className={`h-10 flex items-center justify-center flex-shrink-0 ${sidebarOpen ? 'w-auto pl-2' : 'w-full'}`}>
                   <LogOut className="w-5 h-5" />
                 </div>
                 <div 
@@ -378,7 +378,7 @@ export function AppSidebar({ isFixed = false, isOpen, onToggle }: AppSidebarProp
                   }`}
                   style={{ 
                     fontFamily: 'Inter, system-ui, sans-serif',
-                    fontSize: '14px'
+                    fontSize: '13px'
                   }}
                 >
                   {getUserDisplayName()}

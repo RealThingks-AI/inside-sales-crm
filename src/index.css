@@ -177,6 +177,10 @@ All colors MUST be HSL.
     @apply border-border;
   }
 
+  html {
+    font-size: 14px; /* ~10% smaller than default 16px */
+  }
+
   body {
     @apply bg-background text-foreground font-sans;
     font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
