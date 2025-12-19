@@ -208,30 +208,31 @@ export function AppSidebar({ isFixed = false, isOpen, onToggle }: AppSidebarProp
 
       {/* Menu Items */}
       <div className="flex-1 py-4">
-      <nav className="space-y-2 px-2">
+      <nav className="space-y-2 px-3">
           {menuItems.map((item) => {
             const active = isActive(item.url);
             const menuButton = (
               <NavLink
                 to={item.url}
                 className={`
-                  flex items-center h-10 rounded-lg transition-colors duration-200 font-medium
-                  ${sidebarOpen ? 'px-3 gap-3' : 'justify-center w-10 mx-auto'}
+                  flex items-center h-10 rounded-lg transition-colors duration-200 font-medium gap-3
                   ${active 
                     ? 'text-sidebar-primary bg-sidebar-accent' 
                     : 'text-sidebar-foreground hover:text-sidebar-primary hover:bg-sidebar-accent/50'
                   }
                 `}
               >
-                <item.icon className="w-5 h-5 flex-shrink-0" />
-                {sidebarOpen && (
-                  <span 
-                    className="text-sm font-medium whitespace-nowrap"
-                    style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
-                  >
-                    {item.title}
-                  </span>
-                )}
+                <div className="w-5 h-5 flex items-center justify-center flex-shrink-0">
+                  <item.icon className="w-5 h-5" />
+                </div>
+                <span 
+                  className={`text-sm font-medium whitespace-nowrap transition-all duration-300 overflow-hidden ${
+                    sidebarOpen ? 'opacity-100 w-auto' : 'opacity-0 w-0'
+                  }`}
+                  style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
+                >
+                  {item.title}
+                </span>
               </NavLink>
             );
 
@@ -258,27 +259,31 @@ export function AppSidebar({ isFixed = false, isOpen, onToggle }: AppSidebarProp
       </div>
 
       {/* Bottom Section */}
-      <div className="border-t border-sidebar-border p-2 space-y-2">
+      <div className="border-t border-sidebar-border p-2 space-y-2 px-3">
         {/* Notification Bell */}
         <Tooltip>
           <TooltipTrigger asChild>
             <button
               onClick={handleNotificationClick}
               className={`
-                flex items-center h-10 rounded-lg transition-colors font-medium
-                ${sidebarOpen ? 'px-3 gap-3' : 'justify-center w-10 mx-auto'}
+                flex items-center h-10 rounded-lg transition-colors font-medium gap-3
                 ${currentPath === '/notifications' 
                   ? 'text-sidebar-primary bg-sidebar-accent' 
                   : 'text-sidebar-foreground/70 hover:text-sidebar-primary hover:bg-sidebar-accent/50'
                 }
               `}
             >
-              <Bell className="w-5 h-5 flex-shrink-0" />
-              {sidebarOpen && (
-                <span className="text-sm font-medium whitespace-nowrap" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
-                  Notifications
-                </span>
-              )}
+              <div className="w-5 h-5 flex items-center justify-center flex-shrink-0">
+                <Bell className="w-5 h-5" />
+              </div>
+              <span 
+                className={`text-sm font-medium whitespace-nowrap transition-all duration-300 overflow-hidden ${
+                  sidebarOpen ? 'opacity-100 w-auto' : 'opacity-0 w-0'
+                }`}
+                style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
+              >
+                Notifications
+              </span>
             </button>
           </TooltipTrigger>
           <TooltipContent side="right">
@@ -291,21 +296,22 @@ export function AppSidebar({ isFixed = false, isOpen, onToggle }: AppSidebarProp
           <TooltipTrigger asChild>
             <button
               onClick={handleThemeToggle}
-              className={`
-                flex items-center h-10 rounded-lg transition-colors font-medium
-                ${sidebarOpen ? 'px-3 gap-3' : 'justify-center w-10 mx-auto'}
-                text-sidebar-foreground/70 hover:text-sidebar-primary hover:bg-sidebar-accent/50
-              `}
+              className="flex items-center h-10 rounded-lg transition-colors font-medium gap-3 text-sidebar-foreground/70 hover:text-sidebar-primary hover:bg-sidebar-accent/50"
             >
-              {(() => {
-                const ThemeIcon = getThemeIcon();
-                return <ThemeIcon className="w-5 h-5 flex-shrink-0" />;
-              })()}
-              {sidebarOpen && (
-                <span className="text-sm font-medium whitespace-nowrap" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
-                  Theme
-                </span>
-              )}
+              <div className="w-5 h-5 flex items-center justify-center flex-shrink-0">
+                {(() => {
+                  const ThemeIcon = getThemeIcon();
+                  return <ThemeIcon className="w-5 h-5" />;
+                })()}
+              </div>
+              <span 
+                className={`text-sm font-medium whitespace-nowrap transition-all duration-300 overflow-hidden ${
+                  sidebarOpen ? 'opacity-100 w-auto' : 'opacity-0 w-0'
+                }`}
+                style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
+              >
+                Theme
+              </span>
             </button>
           </TooltipTrigger>
           <TooltipContent side="right">
@@ -318,18 +324,19 @@ export function AppSidebar({ isFixed = false, isOpen, onToggle }: AppSidebarProp
           <TooltipTrigger asChild>
             <button
               onClick={togglePin}
-              className={`
-                flex items-center h-10 rounded-lg transition-colors font-medium
-                ${sidebarOpen ? 'px-3 gap-3' : 'justify-center w-10 mx-auto'}
-                text-sidebar-foreground/70 hover:text-sidebar-primary hover:bg-sidebar-accent/50
-              `}
+              className="flex items-center h-10 rounded-lg transition-colors font-medium gap-3 text-sidebar-foreground/70 hover:text-sidebar-primary hover:bg-sidebar-accent/50"
             >
-              {sidebarOpen ? <Pin className="w-5 h-5 flex-shrink-0" /> : <PinOff className="w-5 h-5 flex-shrink-0" />}
-              {sidebarOpen && (
-                <span className="text-sm font-medium whitespace-nowrap" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
-                  Collapse
-                </span>
-              )}
+              <div className="w-5 h-5 flex items-center justify-center flex-shrink-0">
+                {sidebarOpen ? <Pin className="w-5 h-5" /> : <PinOff className="w-5 h-5" />}
+              </div>
+              <span 
+                className={`text-sm font-medium whitespace-nowrap transition-all duration-300 overflow-hidden ${
+                  sidebarOpen ? 'opacity-100 w-auto' : 'opacity-0 w-0'
+                }`}
+                style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
+              >
+                Collapse
+              </span>
             </button>
           </TooltipTrigger>
           <TooltipContent side="right">
@@ -342,18 +349,19 @@ export function AppSidebar({ isFixed = false, isOpen, onToggle }: AppSidebarProp
           <TooltipTrigger asChild>
             <button
               onClick={handleSignOutClick}
-              className={`
-                flex items-center h-10 rounded-lg transition-colors font-medium
-                ${sidebarOpen ? 'px-3 gap-3' : 'justify-center w-10 mx-auto'}
-                text-sidebar-foreground/70 hover:text-sidebar-primary hover:bg-sidebar-accent/50
-              `}
+              className="flex items-center h-10 rounded-lg transition-colors font-medium gap-3 text-sidebar-foreground/70 hover:text-sidebar-primary hover:bg-sidebar-accent/50"
             >
-              <LogOut className="w-5 h-5 flex-shrink-0" />
-              {sidebarOpen && (
-                <span className="text-sm font-medium whitespace-nowrap" style={{ fontFamily: 'Inter, system-ui, sans-serif' }}>
-                  {getUserDisplayName()}
-                </span>
-              )}
+              <div className="w-5 h-5 flex items-center justify-center flex-shrink-0">
+                <LogOut className="w-5 h-5" />
+              </div>
+              <span 
+                className={`text-sm font-medium whitespace-nowrap transition-all duration-300 overflow-hidden ${
+                  sidebarOpen ? 'opacity-100 w-auto' : 'opacity-0 w-0'
+                }`}
+                style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
+              >
+                {getUserDisplayName()}
+              </span>
             </button>
           </TooltipTrigger>
           <TooltipContent side="right">
