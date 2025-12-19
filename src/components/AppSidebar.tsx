@@ -215,27 +215,23 @@ export function AppSidebar({ isFixed = false, isOpen, onToggle }: AppSidebarProp
               <NavLink
                 to={item.url}
                 className={`
-                  flex items-center h-10 rounded-lg relative transition-colors duration-200 font-medium gap-3 px-3
+                  flex items-center h-10 rounded-lg transition-colors duration-200 font-medium
+                  ${sidebarOpen ? 'px-3 gap-3' : 'justify-center w-10 mx-auto'}
                   ${active 
                     ? 'text-sidebar-primary bg-sidebar-accent' 
                     : 'text-sidebar-foreground hover:text-sidebar-primary hover:bg-sidebar-accent/50'
                   }
-                  ${!sidebarOpen ? 'justify-center px-0' : ''}
                 `}
               >
                 <item.icon className="w-5 h-5 flex-shrink-0" />
-                <span 
-                  className={`transition-all duration-300 overflow-hidden whitespace-nowrap ${
-                    sidebarOpen ? 'opacity-100' : 'opacity-0 w-0 hidden'
-                  }`}
-                  style={{ 
-                    fontFamily: 'Inter, system-ui, sans-serif',
-                    fontSize: '14px',
-                    fontWeight: '500'
-                  }}
-                >
-                  {item.title}
-                </span>
+                {sidebarOpen && (
+                  <span 
+                    className="text-sm font-medium whitespace-nowrap"
+                    style={{ fontFamily: 'Inter, system-ui, sans-serif' }}
+                  >
+                    {item.title}
+                  </span>
+                )}
               </NavLink>
             );
 
