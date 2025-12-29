@@ -2,9 +2,11 @@ import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import { Button } from "@/components/ui/button";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserDisplayNames } from "@/hooks/useUserDisplayNames";
-import { Building2, Globe, Phone, MapPin, Tag, FileText, User, Calendar } from "lucide-react";
+import { AccountModal } from "@/components/AccountModal";
+import { Building2, Globe, Phone, MapPin, Tag, FileText, User, Calendar, Pencil } from "lucide-react";
 
 interface AccountViewModalProps {
   open: boolean;
@@ -34,36 +36,42 @@ interface Account {
 export const AccountViewModal = ({ open, onOpenChange, accountId }: AccountViewModalProps) => {
   const [account, setAccount] = useState<Account | null>(null);
   const [loading, setLoading] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
 
   // Get user IDs for display names
   const userIds = [account?.account_owner, account?.created_by, account?.modified_by].filter(Boolean) as string[];
   const { displayNames } = useUserDisplayNames(userIds);
 
+  const fetchAccount = async () => {
+    if (!accountId) return;
+    
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('accounts')
+        .select('*')
+        .eq('id', accountId)
+        .single();
+
+      if (error) throw error;
+      setAccount(data);
+    } catch (error) {
+      console.error('Error fetching account:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchAccount = async () => {
-      if (!accountId) return;
-      
-      setLoading(true);
-      try {
-        const { data, error } = await supabase
-          .from('accounts')
-          .select('*')
-          .eq('id', accountId)
-          .single();
-
-        if (error) throw error;
-        setAccount(data);
-      } catch (error) {
-        console.error('Error fetching account:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     if (open && accountId) {
       fetchAccount();
     }
   }, [open, accountId]);
+
+  const handleEditSuccess = () => {
+    setEditModalOpen(false);
+    fetchAccount(); // Refresh account data after edit
+  };
 
   const formatDate = (dateString?: string) => {
     if (!dateString) return '-';
@@ -112,11 +120,22 @@ export const AccountViewModal = ({ open, onOpenChange, accountId }: AccountViewM
                   <p className="text-muted-foreground">{account.industry}</p>
                 )}
               </div>
-              {account.status && (
-                <Badge className={`${getStatusColor(account.status)} text-white`}>
-                  {account.status}
-                </Badge>
-              )}
+              <div className="flex items-center gap-2">
+                {account.status && (
+                  <Badge className={`${getStatusColor(account.status)} text-white`}>
+                    {account.status}
+                  </Badge>
+                )}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setEditModalOpen(true)}
+                  className="flex items-center gap-1"
+                >
+                  <Pencil className="w-4 h-4" />
+                  Update
+                </Button>
+              </div>
             </div>
 
             <Separator />
@@ -260,6 +279,14 @@ export const AccountViewModal = ({ open, onOpenChange, accountId }: AccountViewM
           </div>
         )}
       </DialogContent>
+
+      {/* Edit Account Modal */}
+      <AccountModal
+        open={editModalOpen}
+        onOpenChange={setEditModalOpen}
+        account={account}
+        onSuccess={handleEditSuccess}
+      />
     </Dialog>
   );
 };

@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
@@ -8,7 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Mail, Send, Loader2 } from "lucide-react";
+import { Mail, Send, Loader2, Paperclip, X, FileIcon } from "lucide-react";
 
 // Generic recipient interface that works with contacts, leads, and accounts
 export interface EmailRecipient {
@@ -29,6 +29,10 @@ interface SendEmailModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   recipient: EmailRecipient | null;
+  contactId?: string | null;
+  leadId?: string | null;
+  accountId?: string | null;
+  onEmailSent?: () => void;
   // Legacy prop for backwards compatibility
   contact?: {
     contact_name: string;
@@ -38,7 +42,7 @@ interface SendEmailModalProps {
   } | null;
 }
 
-export const SendEmailModal = ({ open, onOpenChange, recipient, contact }: SendEmailModalProps) => {
+export const SendEmailModal = ({ open, onOpenChange, recipient, contactId, leadId, accountId, onEmailSent, contact }: SendEmailModalProps) => {
   const { toast } = useToast();
   const { user } = useAuth();
   const [templates, setTemplates] = useState<EmailTemplate[]>([]);
@@ -46,6 +50,8 @@ export const SendEmailModal = ({ open, onOpenChange, recipient, contact }: SendE
   const [subject, setSubject] = useState("");
   const [body, setBody] = useState("");
   const [isSending, setIsSending] = useState(false);
+  const [attachments, setAttachments] = useState<File[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   const senderEmail = user?.email || "noreply@acmecrm.com";
 
@@ -63,8 +69,59 @@ export const SendEmailModal = ({ open, onOpenChange, recipient, contact }: SendE
       setSelectedTemplate("");
       setSubject("");
       setBody("");
+      setAttachments([]);
     }
   }, [open]);
+
+  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (files) {
+      const newFiles = Array.from(files);
+      const maxSize = 10 * 1024 * 1024; // 10MB per file
+      
+      const validFiles = newFiles.filter(file => {
+        if (file.size > maxSize) {
+          toast({
+            title: "File too large",
+            description: `${file.name} exceeds the 10MB limit`,
+            variant: "destructive",
+          });
+          return false;
+        }
+        return true;
+      });
+      
+      setAttachments(prev => [...prev, ...validFiles]);
+    }
+    // Reset input so same file can be selected again
+    if (fileInputRef.current) {
+      fileInputRef.current.value = "";
+    }
+  };
+
+  const removeAttachment = (index: number) => {
+    setAttachments(prev => prev.filter((_, i) => i !== index));
+  };
+
+  const formatFileSize = (bytes: number): string => {
+    if (bytes < 1024) return bytes + ' B';
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
+    return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+  };
+
+  const fileToBase64 = (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.readAsDataURL(file);
+      reader.onload = () => {
+        const result = reader.result as string;
+        // Remove the data URL prefix (e.g., "data:image/png;base64,")
+        const base64 = result.split(',')[1];
+        resolve(base64);
+      };
+      reader.onerror = error => reject(error);
+    });
+  };
 
   const fetchTemplates = async () => {
     try {
@@ -129,6 +186,15 @@ export const SendEmailModal = ({ open, onOpenChange, recipient, contact }: SendE
     setIsSending(true);
 
     try {
+      // Convert attachments to base64
+      const attachmentData = await Promise.all(
+        attachments.map(async (file) => ({
+          name: file.name,
+          contentType: file.type || 'application/octet-stream',
+          contentBytes: await fileToBase64(file),
+        }))
+      );
+
       const { data, error } = await supabase.functions.invoke('send-email', {
         body: {
           to: emailRecipient.email,
@@ -136,6 +202,7 @@ export const SendEmailModal = ({ open, onOpenChange, recipient, contact }: SendE
           subject: subject.trim(),
           body: body.trim(),
           from: senderEmail,
+          attachments: attachmentData,
         },
       });
 
@@ -145,11 +212,58 @@ export const SendEmailModal = ({ open, onOpenChange, recipient, contact }: SendE
         throw new Error(data.error);
       }
 
+      // Log email to email_history table
+      try {
+        await supabase.from('email_history').insert({
+          recipient_email: emailRecipient.email,
+          recipient_name: emailRecipient.name,
+          subject: subject.trim(),
+          body: body.trim(),
+          sender_email: senderEmail,
+          sent_by: user?.id,
+          contact_id: contactId || null,
+          lead_id: leadId || null,
+          account_id: accountId || null,
+          status: 'sent',
+        });
+      } catch (historyError) {
+        console.error('Error logging email to history:', historyError);
+      }
+
+      // Update contact email tracking stats if contactId is provided
+      if (contactId) {
+        try {
+          // Get current stats
+          const { data: contactData } = await supabase
+            .from('contacts')
+            .select('email_opens, email_clicks, engagement_score')
+            .eq('id', contactId)
+            .single();
+
+          if (contactData) {
+            const newEmailOpens = (contactData.email_opens || 0) + 1;
+            const newEngagementScore = Math.min((contactData.engagement_score || 0) + 5, 100);
+
+            await supabase
+              .from('contacts')
+              .update({
+                email_opens: newEmailOpens,
+                engagement_score: newEngagementScore,
+                last_contacted_at: new Date().toISOString(),
+              })
+              .eq('id', contactId);
+          }
+        } catch (updateError) {
+          console.error('Error updating contact email stats:', updateError);
+        }
+      }
+
       toast({
         title: "Email Sent",
         description: `Email successfully sent to ${emailRecipient.name}`,
       });
       
+      onEmailSent?.();
       onOpenChange(false);
     } catch (error: any) {
       console.error('Error sending email:', error);
@@ -226,8 +340,63 @@ export const SendEmailModal = ({ open, onOpenChange, recipient, contact }: SendE
               value={body}
               onChange={(e) => setBody(e.target.value)}
               placeholder="Email message..."
-              rows={8}
+              rows={6}
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label>Attachments</Label>
+            <div className="flex items-center gap-2">
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                onChange={handleFileSelect}
+                className="hidden"
+                id="email-attachments"
+              />
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => fileInputRef.current?.click()}
+                className="gap-2"
+              >
+                <Paperclip className="h-4 w-4" />
+                Add Attachments
+              </Button>
+              <span className="text-xs text-muted-foreground">
+                Max 10MB per file
+              </span>
+            </div>
+            
+            {attachments.length > 0 && (
+              <div className="space-y-2 mt-2">
+                {attachments.map((file, index) => (
+                  <div
+                    key={index}
+                    className="flex items-center justify-between p-2 bg-muted/50 rounded-lg"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <FileIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+                      <span className="text-sm truncate">{file.name}</span>
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        ({formatFileSize(file.size)})
+                      </span>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeAttachment(index)}
+                      className="h-6 w-6 p-0 shrink-0"
+                    >
+                      <X className="h-4 w-4" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
           <div className="flex justify-end gap-2 pt-4">

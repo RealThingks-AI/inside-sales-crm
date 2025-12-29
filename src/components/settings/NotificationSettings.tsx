@@ -1,12 +1,12 @@
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Bell, Mail, Smartphone, Loader2 } from 'lucide-react';
+import { Bell, Loader2 } from 'lucide-react';
 
 interface NotificationPrefs {
   email_notifications: boolean;
@@ -98,167 +98,134 @@ const NotificationSettings = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="flex items-center justify-center h-32">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Delivery Channels */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Bell className="h-5 w-5" />
-            Notification Channels
-          </CardTitle>
-          <CardDescription>
-            Choose how you want to receive notifications
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Mail className="h-5 w-5 text-muted-foreground" />
-              <div>
-                <Label htmlFor="email_notifications">Email Notifications</Label>
-                <p className="text-sm text-muted-foreground">
-                  Receive notifications via email
-                </p>
-              </div>
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Bell className="h-4 w-4" />
+          Notifications
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Delivery Methods */}
+        <div className="space-y-2">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            Delivery Methods
+          </p>
+          <div className="grid gap-2">
+            <div className="flex items-center justify-between py-1">
+              <Label htmlFor="email_notifications" className="text-sm cursor-pointer">
+                Email
+              </Label>
+              <Switch
+                id="email_notifications"
+                checked={prefs.email_notifications}
+                onCheckedChange={() => togglePref('email_notifications')}
+              />
             </div>
-            <Switch
-              id="email_notifications"
-              checked={prefs.email_notifications}
-              onCheckedChange={() => togglePref('email_notifications')}
-            />
-          </div>
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Bell className="h-5 w-5 text-muted-foreground" />
-              <div>
-                <Label htmlFor="in_app_notifications">In-App Notifications</Label>
-                <p className="text-sm text-muted-foreground">
-                  Show notifications within the app
-                </p>
-              </div>
+            <div className="flex items-center justify-between py-1">
+              <Label htmlFor="in_app_notifications" className="text-sm cursor-pointer">
+                In-App
+              </Label>
+              <Switch
+                id="in_app_notifications"
+                checked={prefs.in_app_notifications}
+                onCheckedChange={() => togglePref('in_app_notifications')}
+              />
             </div>
-            <Switch
-              id="in_app_notifications"
-              checked={prefs.in_app_notifications}
-              onCheckedChange={() => togglePref('in_app_notifications')}
-            />
-          </div>
 
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <Smartphone className="h-5 w-5 text-muted-foreground" />
-              <div>
-                <Label htmlFor="push_notifications">Push Notifications</Label>
-                <p className="text-sm text-muted-foreground">
-                  Receive browser push notifications
-                </p>
-              </div>
+            <div className="flex items-center justify-between py-1">
+              <Label htmlFor="push_notifications" className="text-sm cursor-pointer">
+                Push
+              </Label>
+              <Switch
+                id="push_notifications"
+                checked={prefs.push_notifications}
+                onCheckedChange={() => togglePref('push_notifications')}
+              />
             </div>
-            <Switch
-              id="push_notifications"
-              checked={prefs.push_notifications}
-              onCheckedChange={() => togglePref('push_notifications')}
-            />
           </div>
-        </CardContent>
-      </Card>
+        </div>
 
-      {/* Event Types */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Notification Events</CardTitle>
-          <CardDescription>
-            Choose which events trigger notifications
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <Label htmlFor="lead_assigned">Lead Assigned</Label>
-              <p className="text-sm text-muted-foreground">
-                When a lead is assigned to you
-              </p>
+        {/* Event Triggers */}
+        <div className="space-y-2 pt-2 border-t">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            Event Triggers
+          </p>
+          <div className="grid gap-2">
+            <div className="flex items-center justify-between py-1">
+              <Label htmlFor="lead_assigned" className="text-sm cursor-pointer">
+                Lead Assigned
+              </Label>
+              <Switch
+                id="lead_assigned"
+                checked={prefs.lead_assigned}
+                onCheckedChange={() => togglePref('lead_assigned')}
+              />
             </div>
-            <Switch
-              id="lead_assigned"
-              checked={prefs.lead_assigned}
-              onCheckedChange={() => togglePref('lead_assigned')}
-            />
-          </div>
 
-          <div className="flex items-center justify-between">
-            <div>
-              <Label htmlFor="deal_updates">Deal Updates</Label>
-              <p className="text-sm text-muted-foreground">
-                When deals you're involved in are updated
-              </p>
+            <div className="flex items-center justify-between py-1">
+              <Label htmlFor="deal_updates" className="text-sm cursor-pointer">
+                Deal Updates
+              </Label>
+              <Switch
+                id="deal_updates"
+                checked={prefs.deal_updates}
+                onCheckedChange={() => togglePref('deal_updates')}
+              />
             </div>
-            <Switch
-              id="deal_updates"
-              checked={prefs.deal_updates}
-              onCheckedChange={() => togglePref('deal_updates')}
-            />
-          </div>
 
-          <div className="flex items-center justify-between">
-            <div>
-              <Label htmlFor="task_reminders">Task Reminders</Label>
-              <p className="text-sm text-muted-foreground">
-                Reminders for upcoming and overdue tasks
-              </p>
+            <div className="flex items-center justify-between py-1">
+              <Label htmlFor="task_reminders" className="text-sm cursor-pointer">
+                Task Reminders
+              </Label>
+              <Switch
+                id="task_reminders"
+                checked={prefs.task_reminders}
+                onCheckedChange={() => togglePref('task_reminders')}
+              />
             </div>
-            <Switch
-              id="task_reminders"
-              checked={prefs.task_reminders}
-              onCheckedChange={() => togglePref('task_reminders')}
-            />
-          </div>
 
-          <div className="flex items-center justify-between">
-            <div>
-              <Label htmlFor="meeting_reminders">Meeting Reminders</Label>
-              <p className="text-sm text-muted-foreground">
-                Reminders before scheduled meetings
-              </p>
+            <div className="flex items-center justify-between py-1">
+              <Label htmlFor="meeting_reminders" className="text-sm cursor-pointer">
+                Meeting Reminders
+              </Label>
+              <Switch
+                id="meeting_reminders"
+                checked={prefs.meeting_reminders}
+                onCheckedChange={() => togglePref('meeting_reminders')}
+              />
             </div>
-            <Switch
-              id="meeting_reminders"
-              checked={prefs.meeting_reminders}
-              onCheckedChange={() => togglePref('meeting_reminders')}
-            />
-          </div>
 
-          <div className="flex items-center justify-between">
-            <div>
-              <Label htmlFor="weekly_digest">Weekly Digest</Label>
-              <p className="text-sm text-muted-foreground">
-                Weekly summary of activities and metrics
-              </p>
+            <div className="flex items-center justify-between py-1">
+              <Label htmlFor="weekly_digest" className="text-sm cursor-pointer">
+                Weekly Digest
+              </Label>
+              <Switch
+                id="weekly_digest"
+                checked={prefs.weekly_digest}
+                onCheckedChange={() => togglePref('weekly_digest')}
+              />
             </div>
-            <Switch
-              id="weekly_digest"
-              checked={prefs.weekly_digest}
-              onCheckedChange={() => togglePref('weekly_digest')}
-            />
           </div>
-        </CardContent>
-      </Card>
+        </div>
 
-      <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={saving}>
-          {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Save Preferences
-        </Button>
-      </div>
-    </div>
+        {/* Save Button */}
+        <div className="pt-2 border-t flex justify-end">
+          <Button onClick={handleSave} disabled={saving} size="sm">
+            {saving && <Loader2 className="mr-2 h-3 w-3 animate-spin" />}
+            Save Preferences
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 };
 

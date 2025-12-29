@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { format, subDays, isAfter, isBefore, startOfDay } from 'date-fns';
+import { subDays, isAfter, isBefore, startOfDay } from 'date-fns';
 import { Task } from '@/types/task';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
@@ -18,19 +18,14 @@ import {
 } from 'recharts';
 import {
   CheckCircle2,
-  Clock,
   AlertTriangle,
   TrendingUp,
   ListTodo,
-  Calendar,
 } from 'lucide-react';
 
 interface TaskAnalyticsDashboardProps {
   tasks: Task[];
 }
-
-const COLORS = ['#3b82f6', '#8b5cf6', '#22c55e', '#6b7280'];
-const PRIORITY_COLORS = { high: '#ef4444', medium: '#eab308', low: '#22c55e' };
 
 export const TaskAnalyticsDashboard = ({ tasks }: TaskAnalyticsDashboardProps) => {
   const analytics = useMemo(() => {
@@ -42,7 +37,7 @@ export const TaskAnalyticsDashboard = ({ tasks }: TaskAnalyticsDashboardProps) =
     const completedTasks = tasks.filter(t => t.status === 'completed').length;
     const openTasks = tasks.filter(t => t.status === 'open').length;
     const inProgressTasks = tasks.filter(t => t.status === 'in_progress').length;
-    const deferredTasks = tasks.filter(t => t.status === 'deferred').length;
+    const cancelledTasks = tasks.filter(t => t.status === 'cancelled').length;
 
     const overdueTasks = tasks.filter(t => {
       if (!t.due_date || t.status === 'completed') return false;
@@ -64,7 +59,7 @@ export const TaskAnalyticsDashboard = ({ tasks }: TaskAnalyticsDashboardProps) =
       { name: 'Open', value: openTasks, color: '#3b82f6' },
       { name: 'In Progress', value: inProgressTasks, color: '#8b5cf6' },
       { name: 'Completed', value: completedTasks, color: '#22c55e' },
-      { name: 'Deferred', value: deferredTasks, color: '#6b7280' },
+      { name: 'Cancelled', value: cancelledTasks, color: '#6b7280' },
     ].filter(d => d.value > 0);
 
     // Tasks by priority
@@ -80,7 +75,8 @@ export const TaskAnalyticsDashboard = ({ tasks }: TaskAnalyticsDashboardProps) =
       { name: 'Contacts', count: tasks.filter(t => t.contact_id).length },
       { name: 'Deals', count: tasks.filter(t => t.deal_id).length },
       { name: 'Accounts', count: tasks.filter(t => t.account_id).length },
-      { name: 'Unlinked', count: tasks.filter(t => !t.lead_id && !t.contact_id && !t.deal_id && !t.account_id).length },
+      { name: 'Meetings', count: tasks.filter(t => t.meeting_id).length },
+      { name: 'Unlinked', count: tasks.filter(t => !t.lead_id && !t.contact_id && !t.deal_id && !t.account_id && !t.meeting_id).length },
     ];
 
     return {

@@ -58,41 +58,32 @@ const UserManagement = () => {
   const fetchUsers = useCallback(async () => {
     try {
       console.log('Fetching users with role validation...');
-      const {
-        data,
-        error
-      } = await supabase.functions.invoke('user-admin', {
-        method: 'GET'
-      });
-      console.log('Function response:', {
-        data,
-        error
-      });
-      if (error) {
-        console.error('Error fetching users:', error);
-        throw error;
+      
+      // Fetch users and roles in parallel for faster loading
+      const [usersResponse, rolesResponse] = await Promise.all([
+        supabase.functions.invoke('user-admin', { method: 'GET' }),
+        supabase.from('user_roles').select('user_id, role')
+      ]);
+      
+      if (usersResponse.error) {
+        console.error('Error fetching users:', usersResponse.error);
+        throw usersResponse.error;
       }
 
-      // Fetch roles for all users
-      const userIds = data.users?.map((user: any) => user.id) || [];
-      let userRoles: Record<string, string> = {};
-      if (userIds.length > 0) {
-        const {
-          data: rolesData
-        } = await supabase.from('user_roles').select('user_id, role').in('user_id', userIds);
-        if (rolesData) {
-          userRoles = rolesData.reduce((acc: Record<string, string>, item: any) => {
-            acc[item.user_id] = item.role;
-            return acc;
-          }, {});
-        }
+      // Build roles lookup map
+      const userRoles: Record<string, string> = {};
+      if (rolesResponse.data) {
+        rolesResponse.data.forEach((item: any) => {
+          userRoles[item.user_id] = item.role;
+        });
       }
 
       // Combine user data with roles
-      const usersWithRoles = data.users?.map((user: any) => ({
+      const usersWithRoles = usersResponse.data.users?.map((user: any) => ({
         ...user,
         role: userRoles[user.id] || 'user'
       })) || [];
+      
       console.log('Users fetched successfully:', usersWithRoles.length);
       setUsers(usersWithRoles);
     } catch (error: any) {
@@ -393,9 +384,9 @@ const UserManagement = () => {
             <CardHeader className="pb-4">
               <div className="flex items-center justify-between">
                 
-                <div className="relative w-72">
-                  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input placeholder="Search users by name or email..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="pl-10" />
+                <div className="relative w-64">
+                  <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
+                  <Input placeholder="Search users..." value={searchQuery} onChange={e => setSearchQuery(e.target.value)} className="pl-9" inputSize="control" />
                 </div>
               </div>
             </CardHeader>
@@ -406,42 +397,42 @@ const UserManagement = () => {
                     <TableHead className="w-12">
                       <Checkbox checked={selectedUsers.length === filteredAndSortedUsers.length && filteredAndSortedUsers.length > 0} onCheckedChange={handleSelectAll} />
                     </TableHead>
-                    <TableHead className="cursor-pointer" onClick={() => handleSort('name')}>
+                    <TableHead className="cursor-pointer group" onClick={() => handleSort('name')}>
                       <div className="flex items-center gap-1">
                         Display Name
-                        <ArrowUpDown className="h-3 w-3" />
+                        <ArrowUpDown className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                       </div>
                     </TableHead>
-                    <TableHead className="cursor-pointer" onClick={() => handleSort('email')}>
+                    <TableHead className="cursor-pointer group" onClick={() => handleSort('email')}>
                       <div className="flex items-center gap-1">
                         Email
-                        <ArrowUpDown className="h-3 w-3" />
+                        <ArrowUpDown className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                       </div>
                     </TableHead>
-                    <TableHead className="cursor-pointer" onClick={() => handleSort('role')}>
+                    <TableHead className="cursor-pointer group" onClick={() => handleSort('role')}>
                       <div className="flex items-center gap-1">
                         Role
-                        <ArrowUpDown className="h-3 w-3" />
+                        <ArrowUpDown className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                       </div>
                     </TableHead>
                     <TableHead>Status</TableHead>
-                    <TableHead className="cursor-pointer" onClick={() => handleSort('last_sign_in_at')}>
+                    <TableHead className="cursor-pointer group" onClick={() => handleSort('last_sign_in_at')}>
                       <div className="flex items-center gap-1">
                         Last Login
-                        <ArrowUpDown className="h-3 w-3" />
+                        <ArrowUpDown className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                       </div>
                     </TableHead>
-                    <TableHead className="cursor-pointer" onClick={() => handleSort('created_at')}>
+                    <TableHead className="cursor-pointer group" onClick={() => handleSort('created_at')}>
                       <div className="flex items-center gap-1">
                         Created At
-                        <ArrowUpDown className="h-3 w-3" />
+                        <ArrowUpDown className="h-3 w-3 opacity-0 group-hover:opacity-100 transition-opacity" />
                       </div>
                     </TableHead>
                     <TableHead className="text-center">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredAndSortedUsers.map(user => <TableRow key={user.id}>
+                  {filteredAndSortedUsers.map(user => <TableRow key={user.id} data-state={selectedUsers.includes(user.id) ? "selected" : undefined}>
                       <TableCell>
                         <Checkbox checked={selectedUsers.includes(user.id)} onCheckedChange={checked => handleSelectUser(user.id, checked as boolean)} />
                       </TableCell>
@@ -460,10 +451,10 @@ const UserManagement = () => {
                         </Badge>
                       </TableCell>
                       <TableCell>
-                        {user.last_sign_in_at ? format(new Date(user.last_sign_in_at), 'M/d/yyyy') : '—'}
+                        {user.last_sign_in_at ? format(new Date(user.last_sign_in_at), 'dd/MM/yyyy') : '—'}
                       </TableCell>
                       <TableCell>
-                        {format(new Date(user.created_at), 'M/d/yyyy')}
+                        {format(new Date(user.created_at), 'dd/MM/yyyy')}
                       </TableCell>
                       <TableCell>
                         <div className="flex items-center justify-center gap-1">

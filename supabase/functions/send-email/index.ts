@@ -5,12 +5,19 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+interface EmailAttachment {
+  name: string;
+  contentType: string;
+  contentBytes: string; // Base64 encoded
+}
+
 interface EmailRequest {
   to: string;
   subject: string;
   body: string;
   toName?: string;
   from: string;
+  attachments?: EmailAttachment[];
 }
 
 async function getAccessToken(): Promise<string> {
@@ -55,7 +62,15 @@ async function getAccessToken(): Promise<string> {
 async function sendEmail(accessToken: string, emailRequest: EmailRequest): Promise<void> {
   const graphUrl = `https://graph.microsoft.com/v1.0/users/${emailRequest.from}/sendMail`;
 
-  const emailPayload = {
+  // Build attachments array for Microsoft Graph API
+  const attachments = emailRequest.attachments?.map(att => ({
+    "@odata.type": "#microsoft.graph.fileAttachment",
+    name: att.name,
+    contentType: att.contentType,
+    contentBytes: att.contentBytes,
+  })) || [];
+
+  const emailPayload: any = {
     message: {
       subject: emailRequest.subject,
       body: {
@@ -73,6 +88,12 @@ async function sendEmail(accessToken: string, emailRequest: EmailRequest): Promi
     },
     saveToSentItems: true,
   };
+
+  // Add attachments if present
+  if (attachments.length > 0) {
+    emailPayload.message.attachments = attachments;
+    console.log(`Adding ${attachments.length} attachment(s) to email`);
+  }
 
   console.log(`Sending email to ${emailRequest.to}...`);
 
@@ -101,7 +122,7 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { to, subject, body, toName, from }: EmailRequest = await req.json();
+    const { to, subject, body, toName, from, attachments }: EmailRequest = await req.json();
 
     if (!to || !subject || !from) {
       return new Response(
@@ -113,13 +134,13 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    console.log(`Processing email request from ${from} to: ${to}`);
+    console.log(`Processing email request from ${from} to: ${to}${attachments?.length ? ` with ${attachments.length} attachment(s)` : ''}`);
 
     // Get access token from Azure AD
     const accessToken = await getAccessToken();
 
     // Send email via Microsoft Graph API
-    await sendEmail(accessToken, { to, subject, body, toName, from });
+    await sendEmail(accessToken, { to, subject, body, toName, from, attachments });
 
     return new Response(
       JSON.stringify({ success: true, message: "Email sent successfully" }),

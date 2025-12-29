@@ -122,11 +122,11 @@ const Notifications = () => {
     <div className="h-screen flex flex-col bg-background overflow-hidden">
       {/* Fixed Header */}
       <div className="flex-shrink-0 bg-background">
-        <div className="px-5 h-14 flex items-center border-b w-full">
+        <div className="px-6 h-16 flex items-center border-b w-full">
           <div className="flex items-center justify-between w-full">
-            <div className="flex items-center gap-2">
-              <Bell className="h-5 w-5 text-primary" />
-              <h1 className="text-xl font-bold text-foreground">Notifications</h1>
+            <div className="flex items-center gap-3">
+              <Bell className="h-6 w-6 text-primary" />
+              <h1 className="text-2xl font-bold text-foreground">Notifications</h1>
               {unreadCount > 0 && (
                 <Badge variant="destructive" className="rounded-full">
                   {unreadCount} unread

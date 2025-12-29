@@ -146,6 +146,12 @@ export const KanbanBoard = ({
     try {
       console.log(`Moving deal ${draggableId} to stage ${newStage}`);
       
+      // Show immediate visual feedback
+      toast({
+        title: "Moving Deal...",
+        description: `Moving to ${newStage} stage`,
+      });
+      
       // Create update object with the new stage
       const updates: Partial<Deal> = {
         stage: newStage
@@ -154,8 +160,8 @@ export const KanbanBoard = ({
       await onUpdateDeal(draggableId, updates);
       
       toast({
-        title: "Deal Updated",
-        description: `Deal moved to ${newStage} stage`,
+        title: "Deal Moved",
+        description: `Successfully moved to ${newStage} stage`,
       });
     } catch (error) {
       console.error("Error updating deal stage:", error);
@@ -253,16 +259,17 @@ export const KanbanBoard = ({
   return (
     <div className="h-full flex flex-col overflow-hidden">
       {/* Fixed top search and controls bar */}
-      <div className="flex-shrink-0 px-4 py-2 bg-background border-b border-border">
+      <div className="flex-shrink-0 px-4 py-2 bg-background border-b border-transparent">
         <div className="flex flex-col lg:flex-row gap-2 items-start lg:items-center justify-between">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 flex-1 min-w-0">
-            <div className="relative flex-1 min-w-[180px] max-w-sm">
-              <Search className="absolute left-2 top-1/2 transform -translate-y-1/2 text-muted-foreground w-3 h-3" />
+            <div className="relative w-64">
+              <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4 pointer-events-none" />
               <Input
-                placeholder="Search all deal details..."
+                placeholder="Search deals..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-8 h-8 text-sm transition-all hover:border-primary/50 focus:border-primary w-full"
+                className="pl-9"
+                inputSize="control"
               />
             </div>
             
@@ -281,7 +288,7 @@ export const KanbanBoard = ({
                 variant={selectionMode ? "default" : "outline"}
                 size="sm"
                 onClick={toggleSelectionMode}
-                className="hover-scale transition-all whitespace-nowrap text-sm h-8 px-3"
+                className="hover-scale transition-all whitespace-nowrap h-8 px-3 text-sm"
               >
                 {selectionMode ? "Exit Selection" : "Select Deals"}
               </Button>
@@ -326,7 +333,7 @@ export const KanbanBoard = ({
           }}
         >
           {/* Stage headers - now inside the scrollable container */}
-          <div className="sticky top-0 bg-background border-b border-border/30 z-10 pt-2 pb-2">
+          <div className="sticky top-0 bg-background border-b border-transparent z-10 pt-2 pb-2">
             <div 
               className="grid gap-2"
               style={{ 

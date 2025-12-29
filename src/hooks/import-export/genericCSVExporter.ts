@@ -1,6 +1,7 @@
 
 import { downloadCSV } from '@/utils/csvUtils';
 import { DateFormatUtils } from '@/utils/dateFormatUtils';
+import { UserNameUtils } from '@/utils/userNameUtils';
 
 export class GenericCSVExporter {
   
@@ -11,15 +12,35 @@ export class GenericCSVExporter {
       throw new Error('No data to export');
     }
 
+    // Fetch user display names for all user fields
+    const userIds = UserNameUtils.extractUserIds(data);
+    const userNameMap = await UserNameUtils.fetchUserDisplayNames(userIds);
+    console.log('GenericCSVExporter: Fetched display names for', Object.keys(userNameMap).length, 'users');
+
     // Create CSV header row - exact field order
     const headers = fieldsOrder;
 
-    // Convert data to CSV rows with proper date formatting
+    // Convert data to CSV rows with proper formatting
     const csvRows = data.map((record, index) => {
-      console.log(`GenericCSVExporter: Processing record ${index + 1}`);
       return fieldsOrder.map(field => {
-        const value = record[field];
-        // Use centralized date formatting logic
+        let value = record[field];
+        
+        // Format ID (shortened)
+        if (field === 'id' && value) {
+          return UserNameUtils.formatIdForExport(value);
+        }
+        
+        // Convert UUID to display name for user fields
+        if (UserNameUtils.isUserField(field) && value) {
+          return userNameMap[value] || '';
+        }
+        
+        // Format datetime fields
+        if (UserNameUtils.isDateTimeField(field) && value) {
+          return UserNameUtils.formatDateTimeForExport(value);
+        }
+        
+        // Use existing date formatting for date-only fields
         return DateFormatUtils.processFieldForExport(field, value);
       });
     });

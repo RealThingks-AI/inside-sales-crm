@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useToast } from '@/hooks/use-toast';
+import { format } from 'date-fns';
 
 const validStatuses = ['New', 'Working', 'Warm', 'Hot', 'Nurture', 'Closed-Won', 'Closed-Lost'];
 const validTags = [
@@ -34,6 +35,41 @@ export const useAccountsImportExport = (onImportComplete: () => void) => {
     return result;
   };
 
+  const fetchUserDisplayNames = async (userIds: string[]): Promise<Record<string, string>> => {
+    const uniqueIds = [...new Set(userIds.filter(id => id))];
+    if (uniqueIds.length === 0) return {};
+
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, full_name')
+      .in('id', uniqueIds);
+
+    const nameMap: Record<string, string> = {};
+    profiles?.forEach(profile => {
+      nameMap[profile.id] = profile.full_name || 'Unknown User';
+    });
+
+    return nameMap;
+  };
+
+  const fetchUserIdsByNames = async (names: string[]): Promise<Record<string, string>> => {
+    const uniqueNames = [...new Set(names.filter(name => name && name.trim()))];
+    if (uniqueNames.length === 0) return {};
+
+    const { data: profiles } = await supabase
+      .from('profiles')
+      .select('id, full_name');
+
+    const idMap: Record<string, string> = {};
+    profiles?.forEach(profile => {
+      if (profile.full_name) {
+        idMap[profile.full_name.toLowerCase()] = profile.id;
+      }
+    });
+
+    return idMap;
+  };
+
   const handleImport = async (file: File) => {
     setIsImporting(true);
 
@@ -51,6 +87,21 @@ export const useAccountsImportExport = (onImportComplete: () => void) => {
       }
 
       const headers = parseCSVLine(lines[0]).map(h => h.toLowerCase().replace(/[^a-z0-9_]/g, '_'));
+      
+      // Collect all user names from the CSV to fetch their IDs
+      const userNames: string[] = [];
+      for (let i = 1; i < lines.length; i++) {
+        const values = parseCSVLine(lines[i]);
+        headers.forEach((header, idx) => {
+          if ((header === 'account_owner' || header === 'created_by' || header === 'modified_by') && values[idx]) {
+            userNames.push(values[idx]);
+          }
+        });
+      }
+
+      // Fetch user IDs by names
+      const userIdMap = await fetchUserIdsByNames(userNames);
+      
       const records: any[] = [];
       const errors: string[] = [];
 
@@ -82,12 +133,25 @@ export const useAccountsImportExport = (onImportComplete: () => void) => {
           tags = tagList.filter((t: string) => validTags.includes(t));
         }
 
-        // Check if record has an ID for update
-        const existingId = record.id || null;
+        // UUID validation regex
+        const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+        // Check if record has a valid UUID for update (ignore non-UUID id values)
+        const existingId = record.id && uuidRegex.test(record.id) ? record.id : null;
+
+        // Helper to resolve user ID from name or UUID
+        const resolveUserId = (value: string | null, defaultId: string): string => {
+          if (!value) return defaultId;
+          // Check if it's already a UUID
+          if (uuidRegex.test(value)) return value;
+          // Otherwise, look up by name
+          return userIdMap[value.toLowerCase()] || defaultId;
+        };
 
         records.push({
           id: existingId,
           company_name: companyName,
+          email: record.email || null,
           region: record.region || null,
           country: record.country || null,
           website: record.website || null,
@@ -97,8 +161,8 @@ export const useAccountsImportExport = (onImportComplete: () => void) => {
           notes: record.notes || null,
           industry: record.industry || null,
           phone: record.phone || null,
-          created_by: record.created_by || user.id,
-          account_owner: record.account_owner || user.id,
+          created_by: resolveUserId(record.created_by, user.id),
+          account_owner: resolveUserId(record.account_owner, user.id),
           modified_by: user.id,
         });
       }
@@ -190,8 +254,18 @@ export const useAccountsImportExport = (onImportComplete: () => void) => {
         return;
       }
 
+      // Collect all user IDs to fetch display names
+      const userIds: string[] = [];
+      data.forEach(account => {
+        if (account.account_owner) userIds.push(account.account_owner);
+        if (account.created_by) userIds.push(account.created_by);
+        if (account.modified_by) userIds.push(account.modified_by);
+      });
+
+      const userNameMap = await fetchUserDisplayNames(userIds);
+
       const headers = [
-        'id', 'company_name', 'company_type', 'industry', 'tags', 'country', 
+        'id', 'company_name', 'email', 'company_type', 'industry', 'tags', 'country', 
         'status', 'website', 'region', 'notes', 'phone',
         'account_owner', 'created_by', 'modified_by', 'created_at', 'updated_at'
       ];
@@ -201,6 +275,23 @@ export const useAccountsImportExport = (onImportComplete: () => void) => {
       for (const account of data) {
         const row = headers.map(header => {
           let value = account[header as keyof typeof account];
+          
+          // Keep full ID for proper import matching (don't shorten)
+          
+          // Format dates for readability
+          if ((header === 'created_at' || header === 'updated_at') && value) {
+            try {
+              value = format(new Date(value as string), 'MMM dd, yyyy HH:mm');
+            } catch {
+              // Keep original if parsing fails
+            }
+          }
+          
+          // Convert UUID to display name for user fields
+          if ((header === 'account_owner' || header === 'created_by' || header === 'modified_by') && value) {
+            value = userNameMap[value as string] || '';
+          }
+          
           if (header === 'tags' && Array.isArray(value)) {
             value = value.join(';');
           }

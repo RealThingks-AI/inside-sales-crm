@@ -29,8 +29,8 @@ const YearlyRevenueSummary = ({
     isLoading: yearsLoading
   } = useAvailableYears();
 
-  // Create years array from 2023 to 2026, default to current year (2025 for setup)
-  const availableYears = [2023, 2024, 2025, 2026];
+  // Create years array from 2023 to 2027, default to current year
+  const availableYears = [2023, 2024, 2025, 2026, 2027];
   const currentYear = new Date().getFullYear();
   const defaultYear = availableYears.includes(currentYear) ? currentYear : 2025;
   const [internalSelectedYear, setSelectedYear] = useState(defaultYear);
@@ -151,7 +151,24 @@ const YearlyRevenueSummary = ({
             </div>
           </CardHeader>
           <CardContent>
-            {editingTarget ? <Input value={targetValue} onChange={e => setTargetValue(e.target.value)} placeholder="Enter target amount" type="number" /> : <div className="text-2xl font-bold">{formatCurrency(revenueData?.target || 0)}</div>}
+            {editingTarget ? (
+              <div className="flex items-center gap-1">
+                <span className="text-lg font-semibold">€</span>
+                <Input 
+                  value={targetValue ? Number(targetValue).toLocaleString('en-US') : ''} 
+                  onChange={e => {
+                    const rawValue = e.target.value.replace(/,/g, '');
+                    if (rawValue === '' || /^\d+$/.test(rawValue)) {
+                      setTargetValue(rawValue);
+                    }
+                  }} 
+                  placeholder="8,500,000" 
+                  className="font-semibold"
+                />
+              </div>
+            ) : (
+              <div className="text-2xl font-bold">{formatCurrency(revenueData?.target || 0)}</div>
+            )}
             <p className="text-xs text-muted-foreground">Set for {selectedYear}</p>
           </CardContent>
         </Card>
@@ -208,37 +225,49 @@ const YearlyRevenueSummary = ({
         </CardHeader>
         <CardContent>
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-            {(['q1', 'q2', 'q3', 'q4'] as const).map((quarter, index) => <div key={quarter} className="space-y-3">
-                <div className="text-center">
-                  <h4 className="font-semibold text-lg">Q{index + 1}</h4>
-                  <p className="text-sm text-muted-foreground">
-                    {quarter === 'q1' && 'Jan - Mar'}
-                    {quarter === 'q2' && 'Apr - Jun'}
-                    {quarter === 'q3' && 'Jul - Sep'}
-                    {quarter === 'q4' && 'Oct - Dec'}
-                  </p>
+            {(['q1', 'q2', 'q3', 'q4'] as const).map((quarter, index) => {
+              const quarterColors = {
+                q1: { bg: 'bg-blue-50 dark:bg-blue-950/30', border: 'border-blue-200 dark:border-blue-800', header: 'text-blue-700 dark:text-blue-300', headerBg: 'bg-blue-100 dark:bg-blue-900/50' },
+                q2: { bg: 'bg-green-50 dark:bg-green-950/30', border: 'border-green-200 dark:border-green-800', header: 'text-green-700 dark:text-green-300', headerBg: 'bg-green-100 dark:bg-green-900/50' },
+                q3: { bg: 'bg-orange-50 dark:bg-orange-950/30', border: 'border-orange-200 dark:border-orange-800', header: 'text-orange-700 dark:text-orange-300', headerBg: 'bg-orange-100 dark:bg-orange-900/50' },
+                q4: { bg: 'bg-red-50 dark:bg-red-950/30', border: 'border-red-200 dark:border-red-800', header: 'text-red-700 dark:text-red-300', headerBg: 'bg-red-100 dark:bg-red-900/50' },
+              };
+              const colors = quarterColors[quarter];
+              
+              return (
+                <div key={quarter} className={`space-y-3 p-4 rounded-lg border ${colors.bg} ${colors.border}`}>
+                  <div className={`text-center py-2 rounded-md ${colors.headerBg}`}>
+                    <h4 className={`font-semibold text-lg ${colors.header}`}>Q{index + 1}</h4>
+                    <p className="text-sm text-muted-foreground">
+                      {quarter === 'q1' && 'Jan - Mar'}
+                      {quarter === 'q2' && 'Apr - Jun'}
+                      {quarter === 'q3' && 'Jul - Sep'}
+                      {quarter === 'q4' && 'Oct - Dec'}
+                    </p>
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex justify-between items-center cursor-pointer hover:bg-background/50 p-2 rounded transition-colors" onClick={() => handleCardClick('actual', quarter)}>
+                      <span className="text-sm text-muted-foreground">Actual</span>
+                      <span className="font-semibold text-green-600">
+                        {formatCurrency(revenueData?.actualRevenue[quarter] || 0)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center cursor-pointer hover:bg-background/50 p-2 rounded transition-colors" onClick={() => handleCardClick('projected', quarter)}>
+                      <span className="text-sm text-muted-foreground">Projected</span>
+                      <span className="font-semibold text-blue-600">
+                        {formatCurrency(revenueData?.projectedRevenue[quarter] || 0)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center pt-2 border-t border-border/50">
+                      <span className="text-sm font-medium">Total</span>
+                      <span className="font-bold">
+                        {formatCurrency((revenueData?.actualRevenue[quarter] || 0) + (revenueData?.projectedRevenue[quarter] || 0))}
+                      </span>
+                    </div>
+                  </div>
                 </div>
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center cursor-pointer hover:bg-muted p-2 rounded" onClick={() => handleCardClick('actual', quarter)}>
-                    <span className="text-sm text-muted-foreground">Actual</span>
-                    <span className="font-semibold text-green-600">
-                      {formatCurrency(revenueData?.actualRevenue[quarter] || 0)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center cursor-pointer hover:bg-muted p-2 rounded" onClick={() => handleCardClick('projected', quarter)}>
-                    <span className="text-sm text-muted-foreground">Projected</span>
-                    <span className="font-semibold text-blue-600">
-                      {formatCurrency(revenueData?.projectedRevenue[quarter] || 0)}
-                    </span>
-                  </div>
-                  <div className="flex justify-between items-center pt-2 border-t">
-                    <span className="text-sm font-medium">Total</span>
-                    <span className="font-bold">
-                      {formatCurrency((revenueData?.actualRevenue[quarter] || 0) + (revenueData?.projectedRevenue[quarter] || 0))}
-                    </span>
-                  </div>
-                </div>
-              </div>)}
+              );
+            })}
           </div>
         </CardContent>
       </Card>

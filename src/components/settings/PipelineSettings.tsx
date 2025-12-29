@@ -25,6 +25,7 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { DeleteConfirmDialog } from '@/components/shared/DeleteConfirmDialog';
 
 interface PipelineStage {
   id: string;
@@ -61,6 +62,8 @@ const PipelineSettings = () => {
   const [showStatusModal, setShowStatusModal] = useState(false);
   const [editingStage, setEditingStage] = useState<Partial<PipelineStage> | null>(null);
   const [editingStatus, setEditingStatus] = useState<Partial<LeadStatus> | null>(null);
+  const [stageToDelete, setStageToDelete] = useState<PipelineStage | null>(null);
+  const [statusToDelete, setStatusToDelete] = useState<LeadStatus | null>(null);
 
   const isAdmin = userRole === 'admin';
 
@@ -162,28 +165,32 @@ const PipelineSettings = () => {
     }
   };
 
-  const deleteStage = async (id: string) => {
+  const confirmDeleteStage = async () => {
+    if (!stageToDelete) return;
     try {
       const { error } = await supabase
         .from('pipeline_stages')
         .delete()
-        .eq('id', id);
+        .eq('id', stageToDelete.id);
       if (error) throw error;
       toast.success('Stage deleted');
+      setStageToDelete(null);
       fetchData();
     } catch (error) {
       toast.error('Failed to delete stage');
     }
   };
 
-  const deleteStatus = async (id: string) => {
+  const confirmDeleteStatus = async () => {
+    if (!statusToDelete) return;
     try {
       const { error } = await supabase
         .from('lead_statuses')
         .delete()
-        .eq('id', id);
+        .eq('id', statusToDelete.id);
       if (error) throw error;
       toast.success('Status deleted');
+      setStatusToDelete(null);
       fetchData();
     } catch (error) {
       toast.error('Failed to delete status');
@@ -270,7 +277,7 @@ const PipelineSettings = () => {
                     variant="ghost"
                     size="sm"
                     className="text-destructive"
-                    onClick={() => deleteStage(stage.id)}
+                    onClick={() => setStageToDelete(stage)}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -333,7 +340,7 @@ const PipelineSettings = () => {
                     variant="ghost"
                     size="sm"
                     className="text-destructive"
-                    onClick={() => deleteStatus(status.id)}
+                    onClick={() => setStatusToDelete(status)}
                   >
                     <Trash2 className="h-4 w-4" />
                   </Button>
@@ -478,6 +485,23 @@ const PipelineSettings = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      {/* Delete Confirmation Dialogs */}
+      <DeleteConfirmDialog
+        open={!!stageToDelete}
+        onOpenChange={(open) => !open && setStageToDelete(null)}
+        onConfirm={confirmDeleteStage}
+        title="Delete Pipeline Stage"
+        description={`Are you sure you want to delete the "${stageToDelete?.stage_name}" stage? Deals in this stage will need to be reassigned.`}
+      />
+
+      <DeleteConfirmDialog
+        open={!!statusToDelete}
+        onOpenChange={(open) => !open && setStatusToDelete(null)}
+        onConfirm={confirmDeleteStatus}
+        title="Delete Lead Status"
+        description={`Are you sure you want to delete the "${statusToDelete?.status_name}" status? Leads with this status may need to be updated.`}
+      />
     </div>
   );
 };

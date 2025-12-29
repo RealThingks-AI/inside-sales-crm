@@ -1,6 +1,6 @@
-export type TaskStatus = 'open' | 'in_progress' | 'completed' | 'deferred';
+export type TaskStatus = 'open' | 'in_progress' | 'completed' | 'cancelled';
 export type TaskPriority = 'high' | 'medium' | 'low';
-export type TaskRecurrence = 'none' | 'daily' | 'weekly' | 'monthly' | 'yearly';
+export type TaskModuleType = 'accounts' | 'contacts' | 'leads' | 'meetings' | 'deals';
 
 export interface Task {
   id: string;
@@ -10,37 +10,28 @@ export interface Task {
   priority: TaskPriority;
   due_date: string | null;
   due_time: string | null;
-  reminder_date: string | null;
   assigned_to: string | null;
   created_by: string | null;
-  recurrence: TaskRecurrence;
-  recurrence_end_date: string | null;
-  parent_task_id: string | null;
-  lead_id: string | null;
-  contact_id: string | null;
-  deal_id: string | null;
+  module_type: TaskModuleType | null;
   account_id: string | null;
-  tags: string[] | null;
-  category: string | null;
-  completed_at: string | null;
+  contact_id: string | null;
+  lead_id: string | null;
+  meeting_id: string | null;
+  deal_id: string | null;
   created_at: string;
   updated_at: string;
+  completed_at: string | null;
   // Joined data
   lead_name?: string;
   contact_name?: string;
   deal_name?: string;
   account_name?: string;
-  subtasks?: TaskSubtask[];
-}
-
-export interface TaskSubtask {
-  id: string;
-  task_id: string;
-  title: string;
-  is_completed: boolean;
-  order_index: number;
-  created_at: string;
-  updated_at: string;
+  meeting_subject?: string;
+  deal_stage?: string;
+  contact_account_name?: string;
+  lead_account_name?: string;
+  assigned_user_name?: string;
+  created_by_name?: string;
 }
 
 export interface CreateTaskData {
@@ -49,15 +40,18 @@ export interface CreateTaskData {
   status?: TaskStatus;
   priority?: TaskPriority;
   due_date?: string;
-  due_time?: string;
-  reminder_date?: string;
   assigned_to?: string;
-  recurrence?: TaskRecurrence;
-  recurrence_end_date?: string;
-  lead_id?: string;
-  contact_id?: string;
-  deal_id?: string;
+  module_type?: TaskModuleType;
   account_id?: string;
-  tags?: string[];
-  category?: string;
+  contact_id?: string;
+  lead_id?: string;
+  meeting_id?: string;
+  deal_id?: string;
+}
+
+export interface TaskModalContext {
+  module?: TaskModuleType;
+  recordId?: string;
+  recordName?: string;
+  locked?: boolean;
 }

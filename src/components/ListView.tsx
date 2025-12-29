@@ -5,13 +5,15 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Deal, DealStage, DEAL_STAGES, STAGE_COLORS } from "@/types/deal";
-import { Search, Filter, X, Edit, Trash2, ArrowUp, ArrowDown, CheckSquare } from "lucide-react";
+import { Search, Filter, X, ArrowUp, ArrowDown } from "lucide-react";
+import { RowActionsDropdown, Edit, Trash2, CheckSquare } from "./RowActionsDropdown";
 import { format } from "date-fns";
 import { InlineEditCell } from "./InlineEditCell";
 import { DealColumnCustomizer, DealColumnConfig } from "./DealColumnCustomizer";
 import { BulkActionsBar } from "./BulkActionsBar";
 import { DealsAdvancedFilter, AdvancedFilterState } from "./DealsAdvancedFilter";
-import { DealActionItemsModal } from "./DealActionItemsModal";
+import { TaskModal } from "./tasks/TaskModal";
+import { useTasks } from "@/hooks/useTasks";
 import { DealActionsDropdown } from "./DealActionsDropdown";
 import { useToast } from "@/hooks/use-toast";
 
@@ -47,9 +49,10 @@ export const ListView = ({
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(50);
   
-  // Action Items Modal state
-  const [actionModalOpen, setActionModalOpen] = useState(false);
-  const [selectedDealForActions, setSelectedDealForActions] = useState<Deal | null>(null);
+  // Task Modal state
+  const [taskModalOpen, setTaskModalOpen] = useState(false);
+  const [taskDealId, setTaskDealId] = useState<string | null>(null);
+  const { createTask } = useTasks();
 
   // Column customizer state
   const [columnCustomizerOpen, setColumnCustomizerOpen] = useState(false);
@@ -108,7 +111,7 @@ export const ListView = ({
   const formatDate = (date: string | undefined) => {
     if (!date) return '-';
     try {
-      return format(new Date(date), 'MMM dd, yyyy');
+      return format(new Date(date), 'dd/MM/yyyy');
     } catch {
       return '-';
     }
@@ -368,23 +371,24 @@ export const ListView = ({
   // Get selected deal objects for export
   const selectedDealObjects = deals.filter(deal => selectedDeals.has(deal.id));
 
-  const handleActionClick = (deal: Deal) => {
-    setSelectedDealForActions(deal);
-    setActionModalOpen(true);
+  const handleCreateTask = (deal: Deal) => {
+    setTaskDealId(deal.id);
+    setTaskModalOpen(true);
   };
 
   return (
     <div className="h-full flex flex-col bg-background">
-      <div className="flex-shrink-0 p-4 bg-background border-b">
-        <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center justify-between">
-          <div className="flex flex-col sm:flex-row gap-4 flex-1">
-            <div className="relative w-full sm:w-80">
-              <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4" />
+      <div className="flex-shrink-0 px-4 py-2 bg-background border-b border-border">
+        <div className="flex flex-col lg:flex-row gap-2 items-start lg:items-center justify-between">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center gap-2 flex-1 min-w-0">
+            <div className="relative w-64">
+              <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4 pointer-events-none" />
               <Input
-                placeholder="Search all deal details..."
+                placeholder="Search deals..."
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                className="pl-10 transition-all hover:border-primary/50 focus:border-primary"
+                className="pl-9"
+                inputSize="control"
               />
             </div>
             
@@ -403,23 +407,23 @@ export const ListView = ({
                 variant="ghost" 
                 size="sm"
                 onClick={clearAllFilters}
-                className="flex items-center gap-2 text-muted-foreground hover:text-foreground"
+                className="flex items-center gap-2 text-muted-foreground hover:text-foreground h-8 px-3 text-sm"
               >
                 <X className="w-4 h-4" />
                 Clear All
               </Button>
             )}
-          </div>
 
-          <div className="flex items-center gap-2 shrink-0">
-            <DealActionsDropdown
-              deals={deals}
-              onImport={onImportDeals}
-              onRefresh={() => {}}
-              selectedDeals={selectedDealObjects}
-              onColumnCustomize={() => setColumnCustomizerOpen(true)}
-              showColumns={true}
-            />
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <DealActionsDropdown
+                deals={deals}
+                onImport={onImportDeals}
+                onRefresh={() => {}}
+                selectedDeals={selectedDealObjects}
+                onColumnCustomize={() => setColumnCustomizerOpen(true)}
+                showColumns={true}
+              />
+            </div>
           </div>
         </div>
       </div>
@@ -518,40 +522,34 @@ export const ListView = ({
                     </TableCell>
                   ))}
                   <TableCell>
-                    <div className="flex items-center gap-1">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => handleActionClick(deal)}
-                        className="hover-scale p-1 h-7 w-7"
-                        title="Actions"
-                      >
-                        <CheckSquare className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => onDealClick(deal)}
-                        className="hover-scale p-1 h-7 w-7"
-                        title="Open deal form"
-                      >
-                        <Edit className="w-4 h-4" />
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        onClick={() => {
-                          onDeleteDeals([deal.id]);
-                          toast({
-                            title: "Deal deleted",
-                            description: `Successfully deleted ${deal.project_name || 'deal'}`,
-                          });
-                        }}
-                        className="hover-scale p-1 h-7 w-7 text-destructive hover:text-destructive hover:bg-destructive/10"
-                        title="Delete deal"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
+                    <div className="flex items-center justify-center">
+                      <RowActionsDropdown
+                        actions={[
+                          {
+                            label: "Create Task",
+                            icon: <CheckSquare className="w-4 h-4" />,
+                            onClick: () => handleCreateTask(deal)
+                          },
+                          {
+                            label: "Edit",
+                            icon: <Edit className="w-4 h-4" />,
+                            onClick: () => onDealClick(deal)
+                          },
+                          {
+                            label: "Delete",
+                            icon: <Trash2 className="w-4 h-4" />,
+                            onClick: () => {
+                              onDeleteDeals([deal.id]);
+                              toast({
+                                title: "Deal deleted",
+                                description: `Successfully deleted ${deal.project_name || 'deal'}`,
+                              });
+                            },
+                            destructive: true,
+                            separator: true
+                          }
+                        ]}
+                      />
                     </div>
                   </TableCell>
                 </TableRow>
@@ -572,8 +570,8 @@ export const ListView = ({
         )}
 
         <div className="flex flex-col sm:flex-row items-center justify-between gap-4 p-4">
-          <div className="flex flex-col sm:flex-row items-center gap-4 text-sm text-muted-foreground">
-            <span>Total: <strong>{filteredAndSortedDeals.length}</strong> deals</span>
+          <div className="flex flex-col sm:flex-row items-center gap-4">
+            <span className="text-base font-semibold text-foreground">Total: <strong className="text-primary">{filteredAndSortedDeals.length}</strong> deals</span>
             {hasActiveFilters && (
               <div className="flex items-center gap-2">
                 <span>Active filters:</span>
@@ -621,10 +619,11 @@ export const ListView = ({
         </div>
       </div>
 
-      <DealActionItemsModal
-        open={actionModalOpen}
-        onOpenChange={setActionModalOpen}
-        deal={selectedDealForActions}
+      <TaskModal
+        open={taskModalOpen}
+        onOpenChange={setTaskModalOpen}
+        onSubmit={createTask}
+        context={taskDealId ? { module: 'deals', recordId: taskDealId, locked: true } : undefined}
       />
 
       <DealColumnCustomizer

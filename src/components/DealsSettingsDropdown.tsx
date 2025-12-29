@@ -57,20 +57,13 @@ export const DealsSettingsDropdown = ({
   };
 
   return (
-    <TooltipProvider>
-      <Tooltip>
-        <DropdownMenu>
-          <TooltipTrigger asChild>
-            <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon">
-                <Settings className="w-4 h-4" />
-              </Button>
-            </DropdownMenuTrigger>
-          </TooltipTrigger>
-          <TooltipContent>
-            <p>Settings</p>
-          </TooltipContent>
-          <DropdownMenuContent align="end" className="bg-popover border z-50">
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button variant="outline" size="sm">
+          Actions
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="bg-popover border z-50">
             <DropdownMenuItem onClick={handleImportClick}>
               <Upload className="w-4 h-4 mr-2" />
               Import
@@ -85,9 +78,7 @@ export const DealsSettingsDropdown = ({
                 Columns
               </DropdownMenuItem>
             )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      </Tooltip>
-    </TooltipProvider>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 };

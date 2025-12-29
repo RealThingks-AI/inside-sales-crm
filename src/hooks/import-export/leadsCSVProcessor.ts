@@ -2,6 +2,7 @@
 import { supabase } from '@/integrations/supabase/client';
 import { CSVParser } from '@/utils/csvParser';
 import { DateFormatUtils } from '@/utils/dateFormatUtils';
+import { UserNameUtils } from '@/utils/userNameUtils';
 
 export interface LeadsProcessingOptions {
   userId: string;
@@ -16,6 +17,8 @@ export interface LeadsProcessingResult {
 }
 
 export class LeadsCSVProcessor {
+  private userIdMap: Record<string, string> = {};
+
   async processCSV(csvText: string, options: LeadsProcessingOptions): Promise<LeadsProcessingResult> {
     console.log('LeadsCSVProcessor: Starting processing');
     
@@ -26,6 +29,11 @@ export class LeadsCSVProcessor {
       if (rows.length === 0) {
         throw new Error('No data rows found in CSV');
       }
+
+      // Collect user names from CSV for user fields
+      const userNames = UserNameUtils.extractUserNames(rows, headers, ['contact_owner', 'created_by', 'modified_by']);
+      this.userIdMap = await UserNameUtils.fetchUserIdsByNames(userNames);
+      console.log('LeadsCSVProcessor: Fetched user IDs for', Object.keys(this.userIdMap).length, 'users');
 
       const result: LeadsProcessingResult = {
         successCount: 0,
@@ -214,10 +222,7 @@ export class LeadsCSVProcessor {
       'lead_status': 'lead_status',
       'industry': 'industry',
       'country': 'country',
-      'description': 'description',
-      'contact_owner': 'contact_owner',
-      'created_by': 'created_by',
-      'modified_by': 'modified_by'
+      'description': 'description'
     };
 
     Object.entries(fieldMapping).forEach(([csvField, dbField]) => {
@@ -225,6 +230,17 @@ export class LeadsCSVProcessor {
         leadRecord[dbField] = rowObj[csvField];
       }
     });
+
+    // Handle user fields - convert display names to UUIDs
+    if (rowObj.contact_owner !== undefined && rowObj.contact_owner !== '') {
+      leadRecord.contact_owner = UserNameUtils.resolveUserId(rowObj.contact_owner, this.userIdMap, userId);
+    }
+    if (rowObj.created_by !== undefined && rowObj.created_by !== '') {
+      leadRecord.created_by = UserNameUtils.resolveUserId(rowObj.created_by, this.userIdMap, userId);
+    }
+    if (rowObj.modified_by !== undefined && rowObj.modified_by !== '') {
+      leadRecord.modified_by = UserNameUtils.resolveUserId(rowObj.modified_by, this.userIdMap, userId);
+    }
 
     // Ensure lead_name is always set
     if (!leadRecord.lead_name) {

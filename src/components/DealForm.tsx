@@ -8,7 +8,8 @@ import { Deal, DealStage, getNextStage, getFinalStageOptions, getStageIndex, DEA
 import { useToast } from "@/hooks/use-toast";
 import { validateRequiredFields, getFieldErrors, validateDateLogic, validateRevenueSum } from "./deal-form/validation";
 import { DealStageForm } from "./deal-form/DealStageForm";
-import { DealActionItemsModal } from "./DealActionItemsModal";
+import { TaskModal } from "./tasks/TaskModal";
+import { useTasks } from "@/hooks/useTasks";
 import { supabase } from "@/integrations/supabase/client";
 import { useUserDisplayNames } from "@/hooks/useUserDisplayNames";
 
@@ -28,8 +29,9 @@ export const DealForm = ({ deal, isOpen, onClose, onSave, isCreating = false, in
   const [showPreviousStages, setShowPreviousStages] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({});
   const [showValidationErrors, setShowValidationErrors] = useState(false);
-  const [actionModalOpen, setActionModalOpen] = useState(false);
+  const [taskModalOpen, setTaskModalOpen] = useState(false);
   const { toast } = useToast();
+  const { createTask } = useTasks();
 
   // NEW: Track current user id for default Lead Owner
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -299,7 +301,7 @@ export const DealForm = ({ deal, isOpen, onClose, onSave, isCreating = false, in
   const handleActionButtonClick = (e: React.MouseEvent) => {
     e.preventDefault(); // Prevent form submission
     e.stopPropagation(); // Stop event bubbling
-    setActionModalOpen(true);
+    setTaskModalOpen(true);
   };
 
   return (
@@ -332,6 +334,36 @@ export const DealForm = ({ deal, isOpen, onClose, onSave, isCreating = false, in
             </div>
           </div>
         </DialogHeader>
+
+        {/* Deal Summary Section - Only show for existing deals */}
+        {!isCreating && formData && (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4 p-4 bg-muted/50 rounded-lg mb-4">
+            <div>
+              <p className="text-xs text-muted-foreground">Customer</p>
+              <p className="font-medium truncate">{formData.customer_name || '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Contract Value</p>
+              <p className="font-medium text-primary">
+                {formData.total_contract_value 
+                  ? `€${formData.total_contract_value.toLocaleString()}`
+                  : '-'}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Probability</p>
+              <p className="font-medium">{formData.probability ? `${formData.probability}%` : '-'}</p>
+            </div>
+            <div>
+              <p className="text-xs text-muted-foreground">Expected Close</p>
+              <p className="font-medium">
+                {formData.expected_closing_date 
+                  ? new Date(formData.expected_closing_date).toLocaleDateString()
+                  : '-'}
+              </p>
+            </div>
+          </div>
+        )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <DealStageForm
@@ -393,11 +425,12 @@ export const DealForm = ({ deal, isOpen, onClose, onSave, isCreating = false, in
         </form>
       </DialogContent>
       
-      {/* Action Items Modal */}
-      <DealActionItemsModal
-        open={actionModalOpen}
-        onOpenChange={setActionModalOpen}
-        deal={deal}
+      {/* Task Modal */}
+      <TaskModal
+        open={taskModalOpen}
+        onOpenChange={setTaskModalOpen}
+        onSubmit={createTask}
+        context={deal ? { module: 'deals', recordId: deal.id, locked: true } : undefined}
       />
     </Dialog>
   );

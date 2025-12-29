@@ -193,7 +193,7 @@ export const DealsFilterPanel = ({ filters, onFiltersChange, children }: DealsFi
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
                     {localFilters.expectedClosingDateStart ? (
-                      format(localFilters.expectedClosingDateStart, "PPP")
+                      format(localFilters.expectedClosingDateStart, "dd/MM/yyyy")
                     ) : (
                       <span>From date</span>
                     )}
@@ -221,7 +221,7 @@ export const DealsFilterPanel = ({ filters, onFiltersChange, children }: DealsFi
                   >
                     <CalendarIcon className="mr-2 h-4 w-4" />
                     {localFilters.expectedClosingDateEnd ? (
-                      format(localFilters.expectedClosingDateEnd, "PPP")
+                      format(localFilters.expectedClosingDateEnd, "dd/MM/yyyy")
                     ) : (
                       <span>To date</span>
                     )}
@@ -249,6 +249,7 @@ export const DealsFilterPanel = ({ filters, onFiltersChange, children }: DealsFi
                 placeholder="Search deal name..."
                 value={localFilters.dealName}
                 onChange={(e) => updateFilter("dealName", e.target.value)}
+                inputSize="control"
               />
             </div>
 
@@ -259,6 +260,7 @@ export const DealsFilterPanel = ({ filters, onFiltersChange, children }: DealsFi
                 placeholder="Search project name..."
                 value={localFilters.projectName}
                 onChange={(e) => updateFilter("projectName", e.target.value)}
+                inputSize="control"
               />
             </div>
 
@@ -269,6 +271,7 @@ export const DealsFilterPanel = ({ filters, onFiltersChange, children }: DealsFi
                 placeholder="Search lead name..."
                 value={localFilters.leadName}
                 onChange={(e) => updateFilter("leadName", e.target.value)}
+                inputSize="control"
               />
             </div>
 
@@ -279,6 +282,7 @@ export const DealsFilterPanel = ({ filters, onFiltersChange, children }: DealsFi
                 placeholder="Search customer name..."
                 value={localFilters.customerName}
                 onChange={(e) => updateFilter("customerName", e.target.value)}
+                inputSize="control"
               />
             </div>
           </div>

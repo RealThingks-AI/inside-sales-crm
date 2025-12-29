@@ -427,8 +427,8 @@ const AuditLogsSettings = () => {
         </CardHeader>
         <CardContent>
           <div className="flex items-center gap-4 mb-4">
-            <div className="flex-1">
-              <Input placeholder="Search logs by action, resource, or details..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="max-w-sm" />
+            <div className="w-64">
+              <Input placeholder="Search logs..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} inputSize="control" />
             </div>
             <Select value={actionFilter} onValueChange={setActionFilter}>
               <SelectTrigger className="w-48">
@@ -465,7 +465,7 @@ const AuditLogsSettings = () => {
                 const userName = log.user_id ? userNames[log.user_id] || `User ${log.user_id.substring(0, 8)}...` : 'System';
                 return <TableRow key={log.id}>
                         <TableCell className="font-mono text-sm">
-                          {format(new Date(log.created_at), 'MMM dd, HH:mm:ss')}
+                          {format(new Date(log.created_at), 'dd/MM, HH:mm:ss')}
                         </TableCell>
                         <TableCell>
                           <Badge variant={getActionBadgeVariant(log.action)} className="flex items-center gap-1 w-fit">

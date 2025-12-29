@@ -1,4 +1,6 @@
+import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { cn } from "@/lib/utils";
 
 interface AccountStatusFilterProps {
   value: string;
@@ -17,10 +19,20 @@ const statuses = [
 ];
 
 export const AccountStatusFilter = ({ value, onValueChange }: AccountStatusFilterProps) => {
+  const isFiltered = value && value !== "all";
+  
   return (
     <Select value={value} onValueChange={onValueChange}>
-      <SelectTrigger className="w-40">
+      <SelectTrigger className={cn("w-40 relative", isFiltered && "border-primary")}>
         <SelectValue placeholder="Filter by status" />
+        {isFiltered && (
+          <Badge 
+            variant="default" 
+            className="absolute -top-2 -right-2 h-5 w-5 p-0 flex items-center justify-center text-xs rounded-full"
+          >
+            1
+          </Badge>
+        )}
       </SelectTrigger>
       <SelectContent>
         {statuses.map((status) => (

@@ -11,16 +11,22 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { X, ChevronDown } from "lucide-react";
 
 const contactSchema = z.object({
-  contact_name: z.string().min(1, "Contact name is required"),
+  contact_name: z.string()
+    .min(1, "Contact name is required")
+    .min(2, "Contact name must be at least 2 characters")
+    .max(100, "Contact name must be less than 100 characters"),
   account_id: z.string().optional(),
-  position: z.string().optional(),
-  email: z.string().email("Invalid email address").optional().or(z.literal("")),
-  phone_no: z.string().optional(),
-  linkedin: z.string().url("Invalid LinkedIn URL").optional().or(z.literal("")),
+  position: z.string().max(100, "Position must be less than 100 characters").optional(),
+  email: z.string().email("Please enter a valid email address (e.g., name@company.com)").optional().or(z.literal("")),
+  phone_no: z.string().max(20, "Phone number must be less than 20 characters").optional(),
+  linkedin: z.string().url("Please enter a valid LinkedIn URL (e.g., https://linkedin.com/in/username)").optional().or(z.literal("")),
   contact_source: z.string().optional(),
-  description: z.string().optional(),
+  description: z.string().max(1000, "Description must be less than 1000 characters").optional(),
 });
 
 type ContactFormData = z.infer<typeof contactSchema>;
@@ -39,6 +45,7 @@ interface Contact {
   industry?: string;
   region?: string;
   description?: string;
+  tags?: string[];
 }
 
 interface Account {
@@ -62,12 +69,26 @@ const contactSources = [
   "Other"
 ];
 
+const tagOptions = [
+  "AUTOSAR", "Adaptive AUTOSAR", "Embedded Systems", "BSW", "ECU", "Zone Controller",
+  "HCP", "CI/CD", "V&V Testing", "Integration", "Software Architecture", "LINUX",
+  "QNX", "Cybersecurity", "FuSa", "OTA", "Diagnostics", "Vehicle Network",
+  "Vehicle Architecture", "Connected Car", "Platform", "µC/HW"
+];
+
 export const ContactModal = ({ open, onOpenChange, contact, onSuccess }: ContactModalProps) => {
   const { toast } = useToast();
   const { logCreate, logUpdate } = useCRUDAudit();
   const [loading, setLoading] = useState(false);
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [accountSearch, setAccountSearch] = useState("");
+  const [selectedTags, setSelectedTags] = useState<string[]>([]);
+
+  const toggleTag = (tag: string) => {
+    setSelectedTags(prev => 
+      prev.includes(tag) ? prev.filter(t => t !== tag) : [...prev, tag]
+    );
+  };
 
   const form = useForm<ContactFormData>({
     resolver: zodResolver(contactSchema),
@@ -113,6 +134,7 @@ export const ContactModal = ({ open, onOpenChange, contact, onSuccess }: Contact
         contact_source: contact.contact_source || "",
         description: contact.description || "",
       });
+      setSelectedTags(contact.tags || []);
     } else {
       form.reset({
         contact_name: "",
@@ -124,6 +146,7 @@ export const ContactModal = ({ open, onOpenChange, contact, onSuccess }: Contact
         contact_source: "",
         description: "",
       });
+      setSelectedTags([]);
     }
   }, [contact, form]);
 
@@ -154,6 +177,7 @@ export const ContactModal = ({ open, onOpenChange, contact, onSuccess }: Contact
         linkedin: data.linkedin || null,
         contact_source: data.contact_source || null,
         description: data.description || null,
+        tags: selectedTags,
         created_by: user.data.user.id,
         modified_by: user.data.user.id,
         contact_owner: user.data.user.id,
@@ -257,7 +281,7 @@ export const ContactModal = ({ open, onOpenChange, contact, onSuccess }: Contact
                             placeholder="Search accounts..."
                             value={accountSearch}
                             onChange={(e) => setAccountSearch(e.target.value)}
-                            className="h-8"
+                            inputSize="control"
                           />
                         </div>
                         {filteredAccounts.map((account) => (
@@ -359,6 +383,57 @@ export const ContactModal = ({ open, onOpenChange, contact, onSuccess }: Contact
               />
             </div>
 
+            {/* Tags Multi-select */}
+            <div className="space-y-2">
+              <FormLabel>Tags</FormLabel>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    role="combobox"
+                    className="w-full justify-between h-auto min-h-10"
+                  >
+                    <div className="flex flex-wrap gap-1 flex-1">
+                      {selectedTags.length > 0 ? (
+                        selectedTags.slice(0, 3).map((tag) => (
+                          <Badge key={tag} variant="secondary" className="text-xs">
+                            {tag}
+                          </Badge>
+                        ))
+                      ) : (
+                        <span className="text-muted-foreground">Select tags...</span>
+                      )}
+                      {selectedTags.length > 3 && (
+                        <Badge variant="secondary" className="text-xs">
+                          +{selectedTags.length - 3} more
+                        </Badge>
+                      )}
+                    </div>
+                    <ChevronDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[400px] p-0 bg-popover z-50" align="start">
+                  <div className="p-3 max-h-[300px] overflow-y-auto">
+                    <div className="flex flex-wrap gap-2">
+                      {tagOptions.map((tag) => (
+                        <Badge
+                          key={tag}
+                          variant={selectedTags.includes(tag) ? "default" : "outline"}
+                          className="cursor-pointer hover:opacity-80 transition-opacity"
+                          onClick={() => toggleTag(tag)}
+                        >
+                          {tag}
+                          {selectedTags.includes(tag) && (
+                            <X className="w-3 h-3 ml-1" />
+                          )}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+
             <FormField
               control={form.control}
               name="description"
@@ -386,7 +461,12 @@ export const ContactModal = ({ open, onOpenChange, contact, onSuccess }: Contact
                 Cancel
               </Button>
               <Button type="submit" disabled={loading}>
-                {loading ? "Saving..." : contact ? "Save Changes" : "Add Contact"}
+                {loading ? (
+                  <>
+                    <span className="animate-spin mr-2">⏳</span>
+                    {contact ? "Saving..." : "Creating..."}
+                  </>
+                ) : contact ? "Save Changes" : "Add Contact"}
               </Button>
             </div>
           </form>

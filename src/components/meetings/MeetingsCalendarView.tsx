@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { getMeetingStatus } from "@/utils/meetingStatus";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -119,11 +120,17 @@ export const MeetingsCalendarView = ({ meetings, onMeetingClick, onMeetingUpdate
   };
 
   const getMeetingColor = (meeting: Meeting) => {
-    if (meeting.status === 'cancelled') return 'bg-destructive/20 border-destructive/40 text-destructive-foreground';
-    const now = new Date();
-    const meetingStart = new Date(meeting.start_time);
-    if (meetingStart < now) return 'bg-muted border-muted-foreground/20 text-muted-foreground';
-    return 'bg-primary/20 border-primary/40 text-primary-foreground';
+    const status = getMeetingStatus(meeting);
+    if (status === "cancelled") {
+      return "bg-destructive/30 border-destructive text-destructive dark:bg-destructive/40 dark:text-destructive-foreground";
+    }
+    if (status === "completed") {
+      return "bg-muted border-muted-foreground/30 text-foreground dark:text-foreground";
+    }
+    if (status === "ongoing") {
+      return "bg-secondary border-secondary text-secondary-foreground";
+    }
+    return "bg-primary border-primary text-primary-foreground";
   };
 
   const workHours = Array.from({ length: WORK_END_HOUR - WORK_START_HOUR }, (_, i) => i + WORK_START_HOUR);
@@ -160,10 +167,11 @@ export const MeetingsCalendarView = ({ meetings, onMeetingClick, onMeetingUpdate
     if (!draggedMeeting) return;
 
     // Prevent rescheduling cancelled or completed meetings
-    if (draggedMeeting.status === 'cancelled' || draggedMeeting.status === 'completed') {
+    const draggedStatus = getMeetingStatus(draggedMeeting);
+    if (draggedStatus === "cancelled" || draggedStatus === "completed") {
       toast({
         title: "Cannot reschedule",
-        description: `This meeting is ${draggedMeeting.status} and cannot be rescheduled.`,
+        description: `This meeting is ${draggedStatus} and cannot be rescheduled.`,
         variant: "destructive",
       });
       handleDragEnd();
@@ -214,6 +222,19 @@ export const MeetingsCalendarView = ({ meetings, onMeetingClick, onMeetingUpdate
 
     setIsRescheduling(true);
     try {
+      if (pendingReschedule.meeting.join_url) {
+        const { error: teamsError } = await supabase.functions.invoke("update-teams-meeting", {
+          body: {
+            meetingId: pendingReschedule.meeting.id,
+            joinUrl: pendingReschedule.meeting.join_url,
+            startTime: pendingReschedule.newStart.toISOString(),
+            endTime: pendingReschedule.newEnd.toISOString(),
+            timezone: "UTC",
+          },
+        });
+        if (teamsError) throw teamsError;
+      }
+
       const { error } = await supabase
         .from('meetings')
         .update({
@@ -226,7 +247,7 @@ export const MeetingsCalendarView = ({ meetings, onMeetingClick, onMeetingUpdate
 
       toast({
         title: "Meeting rescheduled",
-        description: `${pendingReschedule.meeting.subject} moved to ${format(pendingReschedule.newStart, 'MMM d, yyyy h:mm a')}`,
+        description: `${pendingReschedule.meeting.subject} moved to ${format(pendingReschedule.newStart, 'dd/MM/yyyy HH:mm')}`,
       });
 
       onMeetingUpdated?.();
@@ -251,9 +272,9 @@ export const MeetingsCalendarView = ({ meetings, onMeetingClick, onMeetingUpdate
     if (viewMode === 'month') {
       return format(currentDate, 'MMMM yyyy');
     } else if (viewMode === 'week') {
-      return `${format(weekStart, 'MMM d')} - ${format(weekEnd, 'MMM d, yyyy')}`;
+      return `${format(weekStart, 'd/MM')} - ${format(weekEnd, 'd/MM/yyyy')}`;
     }
-    return format(currentDate, 'EEEE, MMMM d, yyyy');
+    return format(currentDate, 'EEEE, dd/MM/yyyy');
   };
 
   return (
@@ -460,12 +481,12 @@ const MonthView = ({
                           onMeetingClick(meeting);
                         }}
                         className={cn(
-                          "text-xs px-1.5 py-0.5 rounded truncate cursor-grab active:cursor-grabbing border transition-all hover:shadow-sm",
+                          "text-xs px-1.5 py-0.5 rounded truncate cursor-grab active:cursor-grabbing border transition-all hover:shadow-sm font-medium",
                           getMeetingColor(meeting),
                           draggedMeeting?.id === meeting.id && "opacity-50"
                         )}
                       >
-                        <span className="font-medium">{format(new Date(meeting.start_time), 'HH:mm')}</span>
+                        <span className="font-semibold">{format(new Date(meeting.start_time), 'HH:mm')}</span>
                         {' '}{meeting.subject}
                       </div>
                     ))}
@@ -604,7 +625,7 @@ const DayWeekView = ({
                     onDragEnd={onDragEnd}
                     onClick={() => onMeetingClick(meeting)}
                     className={cn(
-                      "absolute left-1 right-1 rounded-md border px-2 py-1 cursor-grab active:cursor-grabbing transition-all hover:shadow-md overflow-hidden group",
+                      "absolute left-1 right-1 rounded-md border-2 px-2 py-1 cursor-grab active:cursor-grabbing transition-all hover:shadow-lg overflow-hidden group",
                       getMeetingColor(meeting),
                       draggedMeeting?.id === meeting.id && "opacity-50"
                     )}
@@ -620,20 +641,41 @@ const DayWeekView = ({
                         <Video className="h-3 w-3 mt-0.5 flex-shrink-0" />
                       )}
                       <div className="min-w-0 flex-1">
-                        <div className="text-xs font-medium truncate">
+                        <div className="text-xs font-semibold truncate">
                           {meeting.subject}
                         </div>
                         {height > 40 && (
-                          <div className="text-xs opacity-70 truncate">
+                          <div className="text-xs opacity-80 truncate font-medium">
                             {format(new Date(meeting.start_time), 'HH:mm')} - {format(new Date(meeting.end_time), 'HH:mm')}
                           </div>
                         )}
                         {height > 60 && (meeting.lead_name || meeting.contact_name) && (
-                          <div className="text-xs opacity-70 truncate mt-1">
+                          <div className="text-xs opacity-80 truncate mt-1">
                             {meeting.lead_name || meeting.contact_name}
                           </div>
                         )}
                       </div>
+                      {meeting.join_url && (() => {
+                        const now = new Date();
+                        const startTime = new Date(meeting.start_time);
+                        const endTime = new Date(meeting.end_time);
+                        const minutesUntilStart = (startTime.getTime() - now.getTime()) / (1000 * 60);
+                        const isImminent = minutesUntilStart <= 5 && minutesUntilStart >= -((endTime.getTime() - startTime.getTime()) / (1000 * 60));
+                        return (
+                          <a
+                            href={meeting.join_url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={(e) => e.stopPropagation()}
+                            className={cn(
+                              "flex-shrink-0 px-2 py-0.5 text-[10px] font-semibold bg-white/90 hover:bg-white text-primary rounded shadow-sm transition-opacity",
+                              isImminent ? "opacity-100 animate-pulse" : "opacity-0 group-hover:opacity-100"
+                            )}
+                          >
+                            Join
+                          </a>
+                        );
+                      })()}
                     </div>
                   </div>
                 );

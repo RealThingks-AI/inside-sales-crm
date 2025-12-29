@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { EntityEmailHistory } from "@/components/shared/EntityEmailHistory";
+import { SendEmailModal } from "@/components/SendEmailModal";
 import { 
   Building2, 
   Globe, 
@@ -17,7 +19,10 @@ import {
   Briefcase,
   Plus,
   ExternalLink,
-  Loader2
+  Loader2,
+  Mail,
+  Send,
+  History
 } from "lucide-react";
 import { format } from "date-fns";
 import { AccountActivityTimeline } from "./AccountActivityTimeline";
@@ -28,6 +33,7 @@ import { AccountScoreBadge, AccountSegmentBadge } from "./AccountScoreBadge";
 interface Account {
   id: string;
   company_name: string;
+  email?: string | null;
   website?: string | null;
   phone?: string | null;
   industry?: string | null;
@@ -102,10 +108,11 @@ export const AccountDetailModal = ({ open, onOpenChange, account, onUpdate }: Ac
           </DialogHeader>
 
           <Tabs defaultValue="overview" className="w-full">
-            <TabsList className="grid w-full grid-cols-3">
+            <TabsList className="grid w-full grid-cols-4">
               <TabsTrigger value="overview">Overview</TabsTrigger>
-              <TabsTrigger value="timeline">Activity Timeline</TabsTrigger>
-              <TabsTrigger value="associations">Contacts & Deals</TabsTrigger>
+              <TabsTrigger value="timeline">Activity</TabsTrigger>
+              <TabsTrigger value="emails">Emails</TabsTrigger>
+              <TabsTrigger value="associations">Contacts</TabsTrigger>
             </TabsList>
 
             <TabsContent value="overview" className="space-y-4 mt-4">
@@ -194,13 +201,13 @@ export const AccountDetailModal = ({ open, onOpenChange, account, onUpdate }: Ac
                 {account.created_at && (
                   <span className="flex items-center gap-1">
                     <Clock className="h-3 w-3" />
-                    Created: {format(new Date(account.created_at), 'MMM dd, yyyy')}
+                    Created: {format(new Date(account.created_at), 'dd/MM/yyyy')}
                   </span>
                 )}
                 {account.updated_at && (
                   <span className="flex items-center gap-1">
                     <Clock className="h-3 w-3" />
-                    Updated: {format(new Date(account.updated_at), 'MMM dd, yyyy')}
+                    Updated: {format(new Date(account.updated_at), 'dd/MM/yyyy')}
                   </span>
                 )}
               </div>
@@ -208,6 +215,13 @@ export const AccountDetailModal = ({ open, onOpenChange, account, onUpdate }: Ac
 
             <TabsContent value="timeline" className="mt-4">
               <AccountActivityTimeline key={refreshKey} accountId={account.id} />
+            </TabsContent>
+
+            <TabsContent value="emails" className="mt-4">
+              <div className="space-y-4">
+                <h3 className="font-medium">Email History</h3>
+                <EntityEmailHistory entityType="account" entityId={account.id} />
+              </div>
             </TabsContent>
 
             <TabsContent value="associations" className="mt-4">

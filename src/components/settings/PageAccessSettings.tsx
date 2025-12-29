@@ -162,13 +162,14 @@ const PageAccessSettings = () => {
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Search */}
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+        <div className="relative max-w-sm">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground pointer-events-none" />
           <Input
             placeholder="Search by page name..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10"
+            className="pl-9"
+            inputSize="control"
           />
         </div>
 
@@ -220,7 +221,7 @@ const PageAccessSettings = () => {
                     />
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {format(new Date(permission.updated_at), 'M/d/yyyy')}
+                    {format(new Date(permission.updated_at), 'dd/MM/yyyy')}
                   </TableCell>
                 </TableRow>
               ))}

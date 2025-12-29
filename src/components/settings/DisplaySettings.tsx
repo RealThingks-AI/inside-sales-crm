@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
@@ -7,13 +7,12 @@ import { useAuth } from '@/hooks/useAuth';
 import { useThemePreferences } from '@/hooks/useThemePreferences';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
-import { Palette, Sun, Moon, Loader2, Calendar, Clock, DollarSign, Home } from 'lucide-react';
+import { Settings, Sun, Moon, Loader2 } from 'lucide-react';
 
 interface DisplayPrefs {
   date_format: string;
   time_format: string;
   currency: string;
-  language: string;
   default_module: string;
 }
 
@@ -26,7 +25,6 @@ const DisplaySettings = () => {
     date_format: 'DD/MM/YYYY',
     time_format: '12h',
     currency: 'INR',
-    language: 'en',
     default_module: 'dashboard',
   });
 
@@ -51,7 +49,6 @@ const DisplaySettings = () => {
           date_format: data.date_format || 'DD/MM/YYYY',
           time_format: data.time_format || '12h',
           currency: data.currency || 'INR',
-          language: data.language || 'en',
           default_module: data.default_module || 'dashboard',
         });
       }
@@ -77,7 +74,7 @@ const DisplaySettings = () => {
         });
 
       if (error) throw error;
-      toast.success('Display preferences saved');
+      toast.success('Preferences saved');
     } catch (error) {
       console.error('Error saving preferences:', error);
       toast.error('Failed to save preferences');
@@ -88,144 +85,53 @@ const DisplaySettings = () => {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      <div className="flex items-center justify-center h-32">
+        <Loader2 className="h-6 w-6 animate-spin text-primary" />
       </div>
     );
   }
 
   return (
-    <div className="space-y-6">
-      {/* Theme Settings */}
-      <Card>
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Palette className="h-5 w-5" />
-            Theme
-          </CardTitle>
-          <CardDescription>
-            Customize the appearance of the application
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="space-y-2">
-            <Label>Color Theme</Label>
+    <Card>
+      <CardHeader className="pb-3">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Settings className="h-4 w-4" />
+          Preferences
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Row 1: Theme + Default Module */}
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Theme</Label>
             <Select value={theme} onValueChange={setTheme}>
-              <SelectTrigger className="w-full md:w-64">
+              <SelectTrigger className="h-9">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="light">
                   <div className="flex items-center gap-2">
-                    <Sun className="h-4 w-4" />
+                    <Sun className="h-3.5 w-3.5" />
                     Light
                   </div>
                 </SelectItem>
                 <SelectItem value="dark">
                   <div className="flex items-center gap-2">
-                    <Moon className="h-4 w-4" />
+                    <Moon className="h-3.5 w-3.5" />
                     Dark
                   </div>
                 </SelectItem>
               </SelectContent>
             </Select>
           </div>
-        </CardContent>
-      </Card>
 
-      {/* Format Settings */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Date & Time Format</CardTitle>
-          <CardDescription>
-            Set your preferred date and time display formats
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label className="flex items-center gap-2">
-              <Calendar className="h-4 w-4" />
-              Date Format
-            </Label>
-            <Select
-              value={prefs.date_format}
-              onValueChange={(value) => setPrefs(p => ({ ...p, date_format: value }))}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="DD/MM/YYYY">DD/MM/YYYY (31/12/2024)</SelectItem>
-                <SelectItem value="MM/DD/YYYY">MM/DD/YYYY (12/31/2024)</SelectItem>
-                <SelectItem value="YYYY-MM-DD">YYYY-MM-DD (2024-12-31)</SelectItem>
-                <SelectItem value="DD-MMM-YYYY">DD-MMM-YYYY (31-Dec-2024)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="flex items-center gap-2">
-              <Clock className="h-4 w-4" />
-              Time Format
-            </Label>
-            <Select
-              value={prefs.time_format}
-              onValueChange={(value) => setPrefs(p => ({ ...p, time_format: value }))}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="12h">12-hour (3:30 PM)</SelectItem>
-                <SelectItem value="24h">24-hour (15:30)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Regional Settings */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Regional Settings</CardTitle>
-          <CardDescription>
-            Set currency and language preferences
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4 md:grid-cols-2">
-          <div className="space-y-2">
-            <Label className="flex items-center gap-2">
-              <DollarSign className="h-4 w-4" />
-              Currency
-            </Label>
-            <Select
-              value={prefs.currency}
-              onValueChange={(value) => setPrefs(p => ({ ...p, currency: value }))}
-            >
-              <SelectTrigger>
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="INR">₹ INR (Indian Rupee)</SelectItem>
-                <SelectItem value="USD">$ USD (US Dollar)</SelectItem>
-                <SelectItem value="EUR">€ EUR (Euro)</SelectItem>
-                <SelectItem value="GBP">£ GBP (British Pound)</SelectItem>
-                <SelectItem value="AED">د.إ AED (UAE Dirham)</SelectItem>
-                <SelectItem value="SGD">S$ SGD (Singapore Dollar)</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label className="flex items-center gap-2">
-              <Home className="h-4 w-4" />
-              Default Module
-            </Label>
+          <div className="space-y-1.5">
+            <Label className="text-xs">Default Module</Label>
             <Select
               value={prefs.default_module}
               onValueChange={(value) => setPrefs(p => ({ ...p, default_module: value }))}
             >
-              <SelectTrigger>
+              <SelectTrigger className="h-9">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -238,16 +144,77 @@ const DisplaySettings = () => {
               </SelectContent>
             </Select>
           </div>
-        </CardContent>
-      </Card>
+        </div>
 
-      <div className="flex justify-end">
-        <Button onClick={handleSave} disabled={saving}>
-          {saving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
-          Save Preferences
-        </Button>
-      </div>
-    </div>
+        {/* Row 2: Date Format + Time Format */}
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Date Format</Label>
+            <Select
+              value={prefs.date_format}
+              onValueChange={(value) => setPrefs(p => ({ ...p, date_format: value }))}
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="DD/MM/YYYY">DD/MM/YYYY (31/12/2024)</SelectItem>
+                <SelectItem value="MM/DD/YYYY">MM/DD/YYYY (12/31/2024)</SelectItem>
+                <SelectItem value="YYYY-MM-DD">YYYY-MM-DD (2024-12-31)</SelectItem>
+                <SelectItem value="DD-MMM-YYYY">DD-MMM-YYYY (31-Dec-2024)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          <div className="space-y-1.5">
+            <Label className="text-xs">Time Format</Label>
+            <Select
+              value={prefs.time_format}
+              onValueChange={(value) => setPrefs(p => ({ ...p, time_format: value }))}
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="12h">12-hour (3:30 PM)</SelectItem>
+                <SelectItem value="24h">24-hour (15:30)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Row 3: Currency */}
+        <div className="grid gap-3 md:grid-cols-2">
+          <div className="space-y-1.5">
+            <Label className="text-xs">Currency</Label>
+            <Select
+              value={prefs.currency}
+              onValueChange={(value) => setPrefs(p => ({ ...p, currency: value }))}
+            >
+              <SelectTrigger className="h-9">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="INR">₹ INR (Indian Rupee)</SelectItem>
+                <SelectItem value="USD">$ USD (US Dollar)</SelectItem>
+                <SelectItem value="EUR">€ EUR (Euro)</SelectItem>
+                <SelectItem value="GBP">£ GBP (British Pound)</SelectItem>
+                <SelectItem value="AED">د.إ AED (UAE Dirham)</SelectItem>
+                <SelectItem value="SGD">S$ SGD (Singapore Dollar)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+        </div>
+
+        {/* Save Button */}
+        <div className="pt-2 border-t flex justify-end">
+          <Button onClick={handleSave} disabled={saving} size="sm">
+            {saving && <Loader2 className="mr-2 h-3 w-3 animate-spin" />}
+            Save Preferences
+          </Button>
+        </div>
+      </CardContent>
+    </Card>
   );
 };
 

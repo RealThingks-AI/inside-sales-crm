@@ -172,76 +172,134 @@ All colors MUST be HSL.
   }
 }
 
+/* Improved placeholder visibility (#24) */
+::placeholder {
+  color: hsl(var(--muted-foreground));
+  opacity: 0.7;
+}
+
+/* Required field indicator (#40) */
+.form-required::after {
+  content: " *";
+  color: hsl(var(--destructive));
+}
+
+/* Button scale animation */
+.button-scale {
+  @apply transition-all duration-150 active:scale-95;
+}
+
 @layer base {
   * {
     @apply border-border;
   }
 
-  html {
-    font-size: 14px; /* ~10% smaller than default 16px */
+  body {
+    @apply bg-background text-foreground font-sans antialiased;
+    font-family: 'Inter', 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 13px;
+    line-height: 1.5;
   }
 
-  body {
-    @apply bg-background text-foreground font-sans;
-    font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  /* Global typography consistency */
+  h1 {
+    @apply text-xl font-semibold text-foreground;
+  }
+  h2 {
+    @apply text-lg font-semibold text-foreground;
+  }
+  h3 {
+    @apply text-base font-medium text-foreground;
+  }
+  h4, h5, h6 {
+    @apply text-sm font-medium text-foreground;
   }
 }
 
 @layer components {
+  /* Compact page header */
+  .page-header {
+    @apply flex items-center justify-between h-14 px-4 border-b border-border bg-background;
+  }
+  
+  .page-title {
+    @apply text-lg font-semibold text-foreground;
+  }
+
+  /* Compact toolbar/filter bar */
+  .toolbar {
+    @apply flex items-center gap-3 px-4 py-2.5 bg-background border-b border-border;
+  }
+
+  /* Compact table styles */
+  .table-compact th {
+    @apply h-9 px-3 py-2 text-xs font-medium text-muted-foreground uppercase tracking-wide bg-muted/30;
+  }
+  
+  .table-compact td {
+    @apply px-3 py-2 text-sm;
+  }
+
+  .table-compact tr {
+    @apply h-10 border-b border-border/50 hover:bg-muted/30 transition-colors;
+  }
+
   .stage-card {
-    @apply rounded-2xl shadow-md hover:shadow-lg transition-all duration-300 transform hover:scale-[1.02];
+    @apply rounded-lg shadow-sm hover:shadow-md transition-all duration-200;
   }
 
   .stage-header {
-    @apply rounded-t-2xl p-4 font-semibold text-white;
+    @apply rounded-t-lg px-3 py-2 font-medium text-sm;
     background: var(--gradient-header);
   }
 
   .deal-card {
-    @apply bg-card rounded-xl shadow-sm hover:shadow-md transition-all duration-200 border border-border/50;
+    @apply bg-card rounded-lg shadow-sm hover:shadow-md transition-all duration-200 border border-border/50;
   }
 
   .btn-primary {
-    @apply bg-primary text-primary-foreground rounded-lg px-4 py-2 font-medium transition-all duration-200 hover:bg-primary/90 hover:shadow-md;
+    @apply bg-primary text-primary-foreground rounded-md px-3 py-1.5 text-sm font-medium transition-colors hover:bg-primary/90;
   }
 
   .btn-secondary {
-    @apply bg-secondary text-secondary-foreground rounded-lg px-4 py-2 font-medium transition-all duration-200 hover:bg-secondary/80;
+    @apply bg-secondary text-secondary-foreground rounded-md px-3 py-1.5 text-sm font-medium transition-colors hover:bg-secondary/80;
   }
 
-  /* Enhanced utility classes for consistency */
+  /* Utility classes */
   .card-hover {
-    @apply hover:shadow-md hover:scale-[1.01] transition-all duration-200;
+    @apply hover:shadow-md transition-shadow duration-200;
   }
 
   .input-focus {
-    @apply focus:border-primary focus:ring-2 focus:ring-primary/20 transition-all;
+    @apply focus:border-primary focus:ring-1 focus:ring-primary/20 transition-colors;
   }
 
-  .button-scale {
-    @apply hover:scale-105 active:scale-95 transition-transform duration-150;
-  }
-
-  /* Compact mobile utilities */
-  .compact-mobile {
-    @apply text-sm sm:text-base px-2 sm:px-4 py-1 sm:py-2;
-  }
-
+  /* Compact text classes */
   .text-hierarchy {
-    @apply font-bold text-foreground;
+    @apply font-semibold text-foreground text-sm;
   }
 
   .text-sub {
-    @apply text-sm text-muted-foreground font-medium;
+    @apply text-xs text-muted-foreground;
   }
 
-  /* Responsive spacing */
+  /* Consistent spacing */
   .spacing-consistent {
-    @apply p-4 lg:p-6 gap-4 lg:gap-6;
+    @apply p-4 gap-4;
   }
 
-  /* Light blue hover effects */
-  .hover-light-blue {
-    @apply hover:bg-primary/5 hover:border-primary/20 transition-all duration-200;
+  /* Compact card styling */
+  .card-compact {
+    @apply p-4 rounded-lg border border-border bg-card;
+  }
+
+  /* Status badge base */
+  .status-badge {
+    @apply inline-flex items-center px-2 py-0.5 rounded text-xs font-medium;
+  }
+
+  /* Link styling */
+  .link-primary {
+    @apply text-primary hover:text-primary/80 hover:underline transition-colors cursor-pointer;
   }
 }

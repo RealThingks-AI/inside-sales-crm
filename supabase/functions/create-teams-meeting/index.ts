@@ -88,6 +88,18 @@ async function getUserId(accessToken: string, email: string): Promise<string> {
 async function createOnlineMeeting(accessToken: string, meetingRequest: MeetingRequest, organizerUserId: string): Promise<any> {
   console.log('Creating Teams online meeting via Microsoft Graph API...');
   
+  // Build participants list for the online meeting
+  const meetingParticipants = meetingRequest.attendees.map(attendee => ({
+    upn: attendee.email,
+    identity: {
+      user: {
+        displayName: attendee.name || attendee.email
+      }
+    }
+  }));
+
+  console.log('Meeting participants:', JSON.stringify(meetingParticipants, null, 2));
+  
   const meetingBody: Record<string, any> = {
     startDateTime: meetingRequest.startTime,
     endDateTime: meetingRequest.endTime,
@@ -96,7 +108,14 @@ async function createOnlineMeeting(accessToken: string, meetingRequest: MeetingR
       scope: 'everyone',
       isDialInBypassEnabled: true
     },
-    allowedPresenters: 'everyone'
+    allowedPresenters: 'everyone',
+    // Add participants to the online meeting
+    participants: {
+      attendees: meetingParticipants.map(p => ({
+        upn: p.upn,
+        role: 'attendee'
+      }))
+    }
   };
 
   if (meetingRequest.timezone) {
@@ -139,6 +158,7 @@ async function createOnlineMeeting(accessToken: string, meetingRequest: MeetingR
   }
 
   console.log('Teams online meeting created successfully:', meetingData.id);
+  console.log('Meeting participants from response:', JSON.stringify(meetingData.participants, null, 2));
   
   return {
     id: meetingData.id,
@@ -147,6 +167,7 @@ async function createOnlineMeeting(accessToken: string, meetingRequest: MeetingR
     subject: meetingData.subject,
     startDateTime: meetingData.startDateTime,
     endDateTime: meetingData.endDateTime,
+    participants: meetingData.participants,
   };
 }
 
