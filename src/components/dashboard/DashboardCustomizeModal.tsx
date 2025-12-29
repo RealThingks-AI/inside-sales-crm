@@ -38,17 +38,19 @@ export interface DashboardWidget {
 }
 
 const DEFAULT_WIDGETS: DashboardWidget[] = [
-  // Core widgets
-  { key: "leads", label: "My Leads", icon: <FileText className="w-4 h-4" />, visible: true, defaultLayout: { x: 0, y: 0, w: 2, h: 2 } },
-  { key: "contacts", label: "My Contacts", icon: <Users className="w-4 h-4" />, visible: true, defaultLayout: { x: 2, y: 0, w: 2, h: 2 } },
-  { key: "deals", label: "My Deals", icon: <Briefcase className="w-4 h-4" />, visible: true, defaultLayout: { x: 4, y: 0, w: 2, h: 2 } },
-  { key: "actionItems", label: "Action Items", icon: <Clock className="w-4 h-4" />, visible: true, defaultLayout: { x: 6, y: 0, w: 2, h: 2 } },
-  { key: "quickActions", label: "Quick Actions", icon: <Zap className="w-4 h-4" />, visible: true, defaultLayout: { x: 8, y: 0, w: 2, h: 3 } },
-  { key: "upcomingMeetings", label: "Upcoming Meetings", icon: <Calendar className="w-4 h-4" />, visible: true, defaultLayout: { x: 0, y: 2, w: 4, h: 3 } },
-  { key: "taskReminders", label: "Task Reminders", icon: <Bell className="w-4 h-4" />, visible: true, defaultLayout: { x: 4, y: 2, w: 4, h: 3 } },
-  { key: "recentActivities", label: "Recent Activities", icon: <Activity className="w-4 h-4" />, visible: true, defaultLayout: { x: 8, y: 3, w: 4, h: 3 } },
-  { key: "performance", label: "My Performance", icon: <TrendingUp className="w-4 h-4" />, visible: true, defaultLayout: { x: 0, y: 5, w: 6, h: 3 } },
-  { key: "leadStatus", label: "Lead Status Overview", icon: <BarChart3 className="w-4 h-4" />, visible: true, defaultLayout: { x: 6, y: 5, w: 6, h: 3 } },
+  // Core stat widgets - 4 across the top row (3 cols each = 12 total)
+  { key: "leads", label: "My Leads", icon: <FileText className="w-4 h-4" />, visible: true, defaultLayout: { x: 0, y: 0, w: 3, h: 2 } },
+  { key: "contacts", label: "My Contacts", icon: <Users className="w-4 h-4" />, visible: true, defaultLayout: { x: 3, y: 0, w: 3, h: 2 } },
+  { key: "deals", label: "My Deals", icon: <Briefcase className="w-4 h-4" />, visible: true, defaultLayout: { x: 6, y: 0, w: 3, h: 2 } },
+  { key: "actionItems", label: "Action Items", icon: <Clock className="w-4 h-4" />, visible: true, defaultLayout: { x: 9, y: 0, w: 3, h: 2 } },
+  // Second row - Quick Actions + Meetings + Task Reminders
+  { key: "quickActions", label: "Quick Actions", icon: <Zap className="w-4 h-4" />, visible: true, defaultLayout: { x: 0, y: 2, w: 4, h: 3 } },
+  { key: "upcomingMeetings", label: "Upcoming Meetings", icon: <Calendar className="w-4 h-4" />, visible: true, defaultLayout: { x: 4, y: 2, w: 4, h: 3 } },
+  { key: "taskReminders", label: "Task Reminders", icon: <Bell className="w-4 h-4" />, visible: true, defaultLayout: { x: 8, y: 2, w: 4, h: 3 } },
+  // Third row - Recent Activities + Performance + Lead Status
+  { key: "recentActivities", label: "Recent Activities", icon: <Activity className="w-4 h-4" />, visible: true, defaultLayout: { x: 0, y: 5, w: 4, h: 3 } },
+  { key: "performance", label: "My Performance", icon: <TrendingUp className="w-4 h-4" />, visible: true, defaultLayout: { x: 4, y: 5, w: 4, h: 3 } },
+  { key: "leadStatus", label: "Lead Status Overview", icon: <BarChart3 className="w-4 h-4" />, visible: true, defaultLayout: { x: 8, y: 5, w: 4, h: 3 } },
   // Sales & Revenue widgets
   { key: "salesTarget", label: "Sales Target", icon: <Target className="w-4 h-4" />, visible: false, defaultLayout: { x: 0, y: 8, w: 3, h: 2 } },
   { key: "revenueChart", label: "Revenue Chart", icon: <LineChart className="w-4 h-4" />, visible: false, defaultLayout: { x: 3, y: 8, w: 6, h: 3 } },
@@ -60,8 +62,8 @@ const DEFAULT_WIDGETS: DashboardWidget[] = [
   { key: "callLog", label: "Call Log", icon: <PhoneCall className="w-4 h-4" />, visible: false, defaultLayout: { x: 0, y: 12, w: 3, h: 3 } },
   // Team & Activity widgets
   { key: "teamActivity", label: "Team Activity", icon: <MessageSquare className="w-4 h-4" />, visible: false, defaultLayout: { x: 3, y: 14, w: 4, h: 3 } },
-  { key: "completedTasks", label: "Completed Tasks", icon: <CheckCircle className="w-4 h-4" />, visible: false, defaultLayout: { x: 7, y: 14, w: 2, h: 2 } },
-  { key: "overdueItems", label: "Overdue Items", icon: <AlertTriangle className="w-4 h-4" />, visible: false, defaultLayout: { x: 9, y: 13, w: 3, h: 2 } },
+  { key: "completedTasks", label: "Completed Tasks", icon: <CheckCircle className="w-4 h-4" />, visible: false, defaultLayout: { x: 7, y: 14, w: 3, h: 2 } },
+  { key: "overdueItems", label: "Overdue Items", icon: <AlertTriangle className="w-4 h-4" />, visible: false, defaultLayout: { x: 10, y: 13, w: 3, h: 2 } },
   { key: "taskProgress", label: "Task Progress", icon: <ListTodo className="w-4 h-4" />, visible: false, defaultLayout: { x: 0, y: 15, w: 3, h: 3 } },
   // Analytics widgets
   { key: "topDeals", label: "Top Deals", icon: <Trophy className="w-4 h-4" />, visible: false, defaultLayout: { x: 3, y: 17, w: 4, h: 3 } },
@@ -69,7 +71,7 @@ const DEFAULT_WIDGETS: DashboardWidget[] = [
   { key: "geoDistribution", label: "Geo Distribution", icon: <MapPin className="w-4 h-4" />, visible: false, defaultLayout: { x: 0, y: 18, w: 6, h: 3 } },
   { key: "leadSources", label: "Lead Sources", icon: <Filter className="w-4 h-4" />, visible: false, defaultLayout: { x: 6, y: 19, w: 4, h: 3 } },
   // Account & Customer widgets
-  { key: "accountHealth", label: "Account Health", icon: <Building2 className="w-4 h-4" />, visible: false, defaultLayout: { x: 10, y: 19, w: 2, h: 3 } },
+  { key: "accountHealth", label: "Account Health", icon: <Building2 className="w-4 h-4" />, visible: false, defaultLayout: { x: 10, y: 19, w: 3, h: 3 } },
   { key: "customerRetention", label: "Customer Retention", icon: <Star className="w-4 h-4" />, visible: false, defaultLayout: { x: 0, y: 21, w: 3, h: 2 } },
   // Performance widgets
   { key: "winLossRatio", label: "Win/Loss Ratio", icon: <PieChart className="w-4 h-4" />, visible: false, defaultLayout: { x: 3, y: 22, w: 3, h: 2 } },
