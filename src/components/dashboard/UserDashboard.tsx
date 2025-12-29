@@ -25,6 +25,7 @@ import { ContactModal } from "@/components/ContactModal";
 import { AccountModal } from "@/components/AccountModal";
 import { useTasks } from "@/hooks/useTasks";
 import { Task } from "@/types/task";
+import { EmptyState } from "@/components/shared/EmptyState";
 
 const GRID_COLS = 12;
 
@@ -928,13 +929,14 @@ const UserDashboard = () => {
                   ))}
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center py-6 text-center">
-                  <Calendar className="w-8 h-8 text-muted-foreground/50 mb-2" />
-                  <p className="text-sm text-muted-foreground">No upcoming meetings scheduled</p>
-                  <Button variant="link" size="sm" className="mt-1" onClick={() => !isResizeMode && navigate('/meetings')}>
-                    Schedule a meeting
-                  </Button>
-                </div>
+                <EmptyState
+                  title="No meetings scheduled"
+                  description="Schedule your first meeting to stay organized"
+                  illustration="calendar"
+                  actionLabel="Schedule Meeting"
+                  onAction={() => !isResizeMode && setCreateMeetingModalOpen(true)}
+                  variant="compact"
+                />
               )}
             </CardContent>
           </Card>
@@ -1003,13 +1005,14 @@ const UserDashboard = () => {
                   })}
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center py-6 text-center">
-                  <Bell className="w-8 h-8 text-muted-foreground/50 mb-2" />
-                  <p className="text-sm text-muted-foreground">No pending tasks</p>
-                  <Button variant="link" size="sm" className="mt-1" onClick={() => !isResizeMode && navigate('/tasks')}>
-                    Create a task
-                  </Button>
-                </div>
+                <EmptyState
+                  title="No pending tasks"
+                  description="You're all caught up! Create a new task to get started"
+                  illustration="tasks"
+                  actionLabel="Create Task"
+                  onAction={() => { if (!isResizeMode) { setSelectedTask(null); setTaskModalOpen(true); }}}
+                  variant="compact"
+                />
               )}
             </CardContent>
           </Card>
@@ -1046,11 +1049,12 @@ const UserDashboard = () => {
                   ))}
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center py-8 text-center">
-                  <Activity className="w-10 h-10 text-muted-foreground/50 mb-2" />
-                  <p className="text-sm text-muted-foreground">No recent activities</p>
-                  <p className="text-xs text-muted-foreground mt-1">Activities will appear here as you work</p>
-                </div>
+                <EmptyState
+                  title="No recent activities"
+                  description="Activities will appear here as you work with leads, contacts, and deals"
+                  illustration="activities"
+                  variant="compact"
+                />
               )}
             </CardContent>
           </Card>
@@ -1298,10 +1302,14 @@ const UserDashboard = () => {
                   ))}
                 </div>
               ) : (
-                <div className="flex flex-col items-center justify-center py-6 text-center">
-                  <Trophy className="w-8 h-8 text-muted-foreground/50 mb-2" />
-                  <p className="text-sm text-muted-foreground">No deals yet</p>
-                </div>
+                <EmptyState
+                  title="No deals yet"
+                  description="Create your first deal to track opportunities"
+                  illustration="deals"
+                  actionLabel="View Deals"
+                  onAction={() => !isResizeMode && navigate('/deals')}
+                  variant="compact"
+                />
               )}
             </CardContent>
           </Card>
