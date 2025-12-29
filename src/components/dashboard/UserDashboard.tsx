@@ -6,20 +6,23 @@ import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { Skeleton } from "@/components/ui/skeleton";
 import { 
-  Users, FileText, Briefcase, TrendingUp, Clock, CheckCircle2, ArrowRight, Plus, Settings2, Calendar, Activity, Bell, AlertCircle, Info, 
-  Target, PieChart, LineChart, DollarSign, Mail, MessageSquare, CheckCircle, AlertTriangle, 
-  Globe, Building2, Star, Trophy, Gauge, ListTodo, PhoneCall, MapPin, Percent, ArrowUpRight, Filter, Move, Check, X, RotateCcw
+  Users, FileText, Briefcase, TrendingUp, Clock, CheckCircle2, Plus, Settings2, Calendar, Activity, Bell, AlertCircle, Info, 
+  Target, DollarSign, PieChart, LineChart, Star, Trophy, PhoneCall, MessageSquare, ArrowUpRight, Mail, CheckCircle, AlertTriangle,
+  Globe, Building2, Gauge, ListTodo, MapPin, Percent, Filter, Check, X, RotateCcw
 } from "lucide-react";
 import { useState, useRef, useEffect, useCallback } from "react";
-import { WidgetKey, WidgetLayoutConfig, WidgetLayout, DEFAULT_WIDGETS } from "./DashboardCustomizeModal";
+import { WidgetKey, WidgetLayoutConfig, DEFAULT_WIDGETS } from "./DashboardCustomizeModal";
 import { ResizableDashboard } from "./ResizableDashboard";
 import { toast } from "sonner";
-import { format, isAfter, isBefore, addDays } from "date-fns";
+import { format, isBefore, addDays } from "date-fns";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { TaskModal } from "@/components/tasks/TaskModal";
 import { MeetingModal } from "@/components/MeetingModal";
+import { LeadModal } from "@/components/LeadModal";
+import { ContactModal } from "@/components/ContactModal";
+import { AccountModal } from "@/components/AccountModal";
 import { useTasks } from "@/hooks/useTasks";
 import { Task } from "@/types/task";
 
@@ -107,8 +110,14 @@ const UserDashboard = () => {
   const [selectedMeeting, setSelectedMeeting] = useState<any>(null);
   const [meetingModalOpen, setMeetingModalOpen] = useState(false);
   
+  // Quick Actions modal states
+  const [leadModalOpen, setLeadModalOpen] = useState(false);
+  const [contactModalOpen, setContactModalOpen] = useState(false);
+  const [accountModalOpen, setAccountModalOpen] = useState(false);
+  const [createMeetingModalOpen, setCreateMeetingModalOpen] = useState(false);
+  
   // Task operations
-  const { createTask, updateTask, fetchTasks } = useTasks();
+  const { createTask, updateTask } = useTasks();
 
   // Measure container width for grid layout
   useEffect(() => {
@@ -795,9 +804,14 @@ const UserDashboard = () => {
   if (isLoading) {
     return (
       <div className="p-6 space-y-6">
-        <Skeleton className="h-8 w-64" />
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-32" />)}
+        <div className="flex items-center justify-between">
+          <div className="h-8 w-64 rounded-md skeleton-shimmer" />
+          <div className="h-9 w-24 rounded-md skeleton-shimmer" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[...Array(8)].map((_, i) => (
+            <div key={i} className="h-32 rounded-lg skeleton-shimmer" style={{ animationDelay: `${i * 0.1}s` }} />
+          ))}
         </div>
       </div>
     );
@@ -1083,32 +1097,40 @@ const UserDashboard = () => {
         return (
           <Card className="h-full animate-fade-in">
             <CardHeader>
-              <CardTitle>Quick Actions</CardTitle>
+              <CardTitle className="text-base font-medium">Quick Actions</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-3">
+            <CardContent className="space-y-2">
               <Button 
                 variant="outline" 
-                className="w-full justify-between group hover:bg-primary hover:text-primary-foreground transition-colors" 
-                onClick={() => !isResizeMode && navigate('/leads')}
+                className="w-full justify-start gap-2 hover:bg-primary hover:text-primary-foreground transition-colors" 
+                onClick={() => !isResizeMode && setLeadModalOpen(true)}
               >
-                <span className="flex items-center gap-2"><Plus className="w-4 h-4" />Add New Lead</span>
-                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                <Plus className="w-4 h-4" />
+                Add New Lead
               </Button>
               <Button 
                 variant="outline" 
-                className="w-full justify-between group hover:bg-primary hover:text-primary-foreground transition-colors" 
-                onClick={() => !isResizeMode && navigate('/contacts')}
+                className="w-full justify-start gap-2 hover:bg-primary hover:text-primary-foreground transition-colors" 
+                onClick={() => !isResizeMode && setContactModalOpen(true)}
               >
-                <span className="flex items-center gap-2"><Plus className="w-4 h-4" />Add New Contact</span>
-                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                <Plus className="w-4 h-4" />
+                Add New Contact
               </Button>
               <Button 
                 variant="outline" 
-                className="w-full justify-between group hover:bg-primary hover:text-primary-foreground transition-colors" 
-                onClick={() => !isResizeMode && navigate('/deals')}
+                className="w-full justify-start gap-2 hover:bg-primary hover:text-primary-foreground transition-colors" 
+                onClick={() => !isResizeMode && setAccountModalOpen(true)}
               >
-                <span className="flex items-center gap-2"><Plus className="w-4 h-4" />Create New Deal</span>
-                <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
+                <Plus className="w-4 h-4" />
+                Add New Account
+              </Button>
+              <Button 
+                variant="outline" 
+                className="w-full justify-start gap-2 hover:bg-primary hover:text-primary-foreground transition-colors" 
+                onClick={() => !isResizeMode && setCreateMeetingModalOpen(true)}
+              >
+                <Plus className="w-4 h-4" />
+                Schedule Meeting
               </Button>
             </CardContent>
           </Card>
@@ -1488,7 +1510,7 @@ const UserDashboard = () => {
         }}
       />
       
-      {/* Meeting Modal */}
+      {/* Meeting Modal (View/Edit) */}
       <MeetingModal
         open={meetingModalOpen}
         onOpenChange={(open) => {
@@ -1500,6 +1522,69 @@ const UserDashboard = () => {
           queryClient.invalidateQueries({ queryKey: ['user-upcoming-meetings', user?.id] });
           setMeetingModalOpen(false);
           setSelectedMeeting(null);
+        }}
+      />
+      
+      {/* Create Meeting Modal (Quick Actions) */}
+      <MeetingModal
+        open={createMeetingModalOpen}
+        onOpenChange={setCreateMeetingModalOpen}
+        meeting={null}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['user-upcoming-meetings', user?.id] });
+          setCreateMeetingModalOpen(false);
+          toast.success("Meeting scheduled successfully");
+        }}
+      />
+      
+      {/* Lead Modal (Quick Actions) */}
+      <LeadModal
+        open={leadModalOpen}
+        onOpenChange={(open) => {
+          setLeadModalOpen(open);
+          if (!open) {
+            queryClient.invalidateQueries({ queryKey: ['user-leads-summary', user?.id] });
+          }
+        }}
+        lead={null}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['user-leads-summary', user?.id] });
+          setLeadModalOpen(false);
+          toast.success("Lead created successfully");
+        }}
+      />
+      
+      {/* Contact Modal (Quick Actions) */}
+      <ContactModal
+        open={contactModalOpen}
+        onOpenChange={(open) => {
+          setContactModalOpen(open);
+          if (!open) {
+            queryClient.invalidateQueries({ queryKey: ['user-contacts-count', user?.id] });
+          }
+        }}
+        contact={null}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['user-contacts-count', user?.id] });
+          setContactModalOpen(false);
+          toast.success("Contact created successfully");
+        }}
+      />
+      
+      {/* Account Modal (Quick Actions) */}
+      <AccountModal
+        open={accountModalOpen}
+        onOpenChange={(open) => {
+          setAccountModalOpen(open);
+          if (!open) {
+            queryClient.invalidateQueries({ queryKey: ['user-accounts-summary', user?.id] });
+          }
+        }}
+        account={null}
+        onSuccess={() => {
+          queryClient.invalidateQueries({ queryKey: ['user-accounts-summary', user?.id] });
+          setAccountModalOpen(false);
+          toast.success("Account created successfully");
         }}
       />
     </div>
