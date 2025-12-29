@@ -1,7 +1,6 @@
 import YearlyRevenueSummary from "@/components/YearlyRevenueSummary";
 import UserDashboard from "@/components/dashboard/UserDashboard";
 import { useUserRole } from "@/hooks/useUserRole";
-import { Skeleton } from "@/components/ui/skeleton";
 import { NotificationBell } from "@/components/NotificationBell";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useState, useEffect } from "react";
@@ -76,9 +75,14 @@ const Dashboard = () => {
   if (loading || (isAdmin && prefLoading)) {
     return (
       <div className="p-6 space-y-6">
-        <Skeleton className="h-8 w-64" />
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          {[...Array(4)].map((_, i) => <Skeleton key={i} className="h-32" />)}
+        <div className="flex items-center justify-between">
+          <div className="h-8 w-64 rounded-md skeleton-shimmer" />
+          <div className="h-9 w-24 rounded-md skeleton-shimmer" />
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          {[...Array(8)].map((_, i) => (
+            <div key={i} className="h-32 rounded-lg skeleton-shimmer" style={{ animationDelay: `${i * 0.1}s` }} />
+          ))}
         </div>
       </div>
     );
