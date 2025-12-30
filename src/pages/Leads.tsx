@@ -10,8 +10,11 @@ import { LeadDeleteConfirmDialog } from "@/components/LeadDeleteConfirmDialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { BulkEmailModal, BulkEmailRecipient } from "@/components/BulkEmailModal";
 import { supabase } from "@/integrations/supabase/client";
+import { useSearchParams } from "react-router-dom";
 
 const Leads = () => {
+  const [searchParams] = useSearchParams();
+  const initialStatus = searchParams.get('status') || 'New';
   const { toast } = useToast();
   const [showColumnCustomizer, setShowColumnCustomizer] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -183,7 +186,8 @@ const Leads = () => {
           setShowModal={setShowModal} 
           selectedLeads={selectedLeads} 
           setSelectedLeads={setSelectedLeads} 
-          key={refreshTrigger} 
+          key={`${refreshTrigger}-${initialStatus}`}
+          initialStatus={initialStatus}
         />
       </div>
 

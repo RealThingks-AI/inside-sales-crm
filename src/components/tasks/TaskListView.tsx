@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { format, isPast, isToday } from 'date-fns';
 import { Task, TaskStatus, TaskModuleType } from '@/types/task';
 import { Card } from '@/components/ui/card';
@@ -42,6 +42,8 @@ interface TaskListViewProps {
   onDelete: (taskId: string) => void;
   onStatusChange: (taskId: string, status: TaskStatus) => void;
   onToggleComplete: (task: Task) => void;
+  initialStatusFilter?: string;
+  initialOwnerFilter?: string;
 }
 
 const priorityColors = {
@@ -71,16 +73,30 @@ export const TaskListView = ({
   onDelete,
   onStatusChange,
   onToggleComplete,
+  initialStatusFilter = 'all',
+  initialOwnerFilter = 'all',
 }: TaskListViewProps) => {
   const [searchTerm, setSearchTerm] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [statusFilter, setStatusFilter] = useState<string>(initialStatusFilter);
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
-  const [assignedToFilter, setAssignedToFilter] = useState<string>('all');
+  const [assignedToFilter, setAssignedToFilter] = useState<string>(initialOwnerFilter);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [taskToDelete, setTaskToDelete] = useState<Task | null>(null);
 
+  // Sync statusFilter when initialStatusFilter prop changes (from URL)
+  useEffect(() => {
+    setStatusFilter(initialStatusFilter);
+  }, [initialStatusFilter]);
+
+  // Sync assignedToFilter when initialOwnerFilter prop changes (from URL)
+  useEffect(() => {
+    setAssignedToFilter(initialOwnerFilter);
+  }, [initialOwnerFilter]);
+
   const assignedToIds = [...new Set(tasks.map(t => t.assigned_to).filter(Boolean))] as string[];
-  const { displayNames } = useUserDisplayNames(assignedToIds);
+  const createdByIds = [...new Set(tasks.map(t => t.created_by).filter(Boolean))] as string[];
+  const allUserIds = [...new Set([...assignedToIds, ...createdByIds])];
+  const { displayNames } = useUserDisplayNames(allUserIds);
 
   const filteredTasks = tasks.filter(task => {
     const matchesSearch = task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -204,13 +220,14 @@ export const TaskListView = ({
               <TableHead>Due Date</TableHead>
               <TableHead>Assigned To</TableHead>
               <TableHead>Linked To</TableHead>
+              <TableHead>Task Owner</TableHead>
               <TableHead className="w-20">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
             {filteredTasks.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} className="text-center py-8 text-muted-foreground">
+                <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
                   No tasks found
                 </TableCell>
               </TableRow>
@@ -278,6 +295,18 @@ export const TaskListView = ({
                           <linkedEntity.icon className="h-3 w-3" />
                           <span className="truncate max-w-[100px]" title={linkedEntity.name}>
                             {linkedEntity.name}
+                          </span>
+                        </div>
+                      ) : (
+                        <span className="text-muted-foreground">-</span>
+                      )}
+                    </TableCell>
+                    <TableCell>
+                      {task.created_by ? (
+                        <div className="flex items-center gap-1 text-sm">
+                          <User className="h-3 w-3 text-muted-foreground" />
+                          <span className="truncate max-w-[100px]" title={displayNames[task.created_by]}>
+                            {displayNames[task.created_by] || 'Loading...'}
                           </span>
                         </div>
                       ) : (

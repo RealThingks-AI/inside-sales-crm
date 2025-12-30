@@ -1,13 +1,16 @@
 import { useState, useEffect, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery } from "@tanstack/react-query";
+import { useUserDisplayNames } from "@/hooks/useUserDisplayNames";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Plus, Search, Video, Trash2, Edit, Calendar, ArrowUpDown, ArrowUp, ArrowDown, List, CalendarDays, CheckCircle2, AlertCircle, UserX, CalendarClock } from "lucide-react";
+import { Plus, Search, Video, Trash2, Edit, Calendar, ArrowUpDown, ArrowUp, ArrowDown, List, CalendarDays, CheckCircle2, AlertCircle, UserX, CalendarClock, User } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { MeetingsCalendarView } from "@/components/meetings/MeetingsCalendarView";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
@@ -37,6 +40,8 @@ interface Meeting {
   contact_name?: string | null;
 }
 const Meetings = () => {
+  const [searchParams] = useSearchParams();
+  const initialStatus = searchParams.get('status') || 'all';
   const {
     user
   } = useAuth();
@@ -53,10 +58,46 @@ const Meetings = () => {
   const [meetingToDelete, setMeetingToDelete] = useState<string | null>(null);
   const [selectedMeetings, setSelectedMeetings] = useState<string[]>([]);
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
-  const [statusFilter, setStatusFilter] = useState<string>("all");
+  const [statusFilter, setStatusFilter] = useState<string>(initialStatus);
+  const [organizerFilter, setOrganizerFilter] = useState<string>("all");
   const [sortColumn, setSortColumn] = useState<SortColumn>(null);
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [viewMode, setViewMode] = useState<'table' | 'calendar'>('table');
+
+  // Get owner parameter from URL - "me" means filter by current user
+  const ownerParam = searchParams.get('owner');
+
+  // Sync owner filter when URL has owner=me
+  useEffect(() => {
+    if (ownerParam === 'me' && user?.id) {
+      setOrganizerFilter(user.id);
+    } else if (!ownerParam) {
+      setOrganizerFilter('all');
+    }
+  }, [ownerParam, user?.id]);
+
+  // Sync statusFilter when URL changes
+  useEffect(() => {
+    const urlStatus = searchParams.get('status');
+    if (urlStatus) {
+      setStatusFilter(urlStatus);
+    }
+  }, [searchParams]);
+
+  // Fetch all profiles for organizer dropdown
+  const { data: allProfiles = [] } = useQuery({
+    queryKey: ['all-profiles'],
+    queryFn: async () => {
+      const { data } = await supabase.from('profiles').select('id, full_name');
+      return data || [];
+    },
+  });
+
+  // Get organizer display names
+  const organizerIds = useMemo(() => {
+    return [...new Set(meetings.map(m => m.created_by).filter(Boolean))] as string[];
+  }, [meetings]);
+  const { displayNames: organizerNames } = useUserDisplayNames(organizerIds);
   const fetchMeetings = async () => {
     try {
       setLoading(true);
@@ -112,9 +153,11 @@ const Meetings = () => {
   const sortedAndFilteredMeetings = useMemo(() => {
     let filtered = meetings.filter(meeting => {
       const matchesSearch = meeting.subject?.toLowerCase().includes(searchTerm.toLowerCase()) || meeting.lead_name?.toLowerCase().includes(searchTerm.toLowerCase()) || meeting.contact_name?.toLowerCase().includes(searchTerm.toLowerCase());
-      if (statusFilter === "all") return matchesSearch;
-      const meetingStatus = getEffectiveStatus(meeting);
-      return matchesSearch && meetingStatus === statusFilter;
+      
+      const matchesStatus = statusFilter === "all" || getEffectiveStatus(meeting) === statusFilter;
+      const matchesOrganizer = organizerFilter === "all" || meeting.created_by === organizerFilter;
+      
+      return matchesSearch && matchesStatus && matchesOrganizer;
     });
     if (sortColumn) {
       filtered = [...filtered].sort((a, b) => {
@@ -352,7 +395,20 @@ const Meetings = () => {
                   <SelectItem value="cancelled">Cancelled</SelectItem>
                 </SelectContent>
               </Select>
-              
+
+              <Select value={organizerFilter} onValueChange={setOrganizerFilter}>
+                <SelectTrigger className="w-[180px]">
+                  <SelectValue placeholder="All Organizers" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="all">All Organizers</SelectItem>
+                  {allProfiles.map((profile) => (
+                    <SelectItem key={profile.id} value={profile.id}>
+                      {profile.full_name || 'Unknown'}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
               {/* Bulk Actions */}
               {selectedMeetings.length > 0 && <div className="flex items-center gap-2 bg-muted/50 px-4 py-2 rounded-lg">
                   <span className="text-sm text-muted-foreground">
@@ -404,12 +460,13 @@ const Meetings = () => {
                     </TableHead>
                     <TableHead>Outcome</TableHead>
                     <TableHead>Join URL</TableHead>
+                    <TableHead>Organizer</TableHead>
                     <TableHead className="w-[100px]">Actions</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
                   {filteredMeetings.length === 0 ? <TableRow>
-                      <TableCell colSpan={9} className="text-center py-8 text-muted-foreground">
+                      <TableCell colSpan={10} className="text-center py-8 text-muted-foreground">
                         <Calendar className="h-12 w-12 mx-auto mb-2 opacity-50" />
                         No meetings found
                       </TableCell>
@@ -454,6 +511,14 @@ const Meetings = () => {
                           ) : (
                             <span className="text-muted-foreground">—</span>
                           )}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center gap-1 text-sm">
+                            <User className="h-3 w-3 text-muted-foreground" />
+                            <span className="truncate max-w-[120px]">
+                              {meeting.created_by ? organizerNames[meeting.created_by] || 'Loading...' : '-'}
+                            </span>
+                          </div>
                         </TableCell>
                         <TableCell>
                           <div className="flex items-center gap-2">

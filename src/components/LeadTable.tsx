@@ -1,19 +1,22 @@
 import { useState, useEffect, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useCRUDAudit } from "@/hooks/useCRUDAudit";
 import { useUserDisplayNames } from "@/hooks/useUserDisplayNames";
 import { useUserRole } from "@/hooks/useUserRole";
+import { useColumnPreferences } from "@/hooks/useColumnPreferences";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, CalendarPlus, CheckSquare, FileText, Plus } from "lucide-react";
 import { RowActionsDropdown, Edit, Trash2, Mail, RefreshCw } from "./RowActionsDropdown";
 import { LeadModal } from "./LeadModal";
-import { LeadColumnCustomizer, LeadColumnConfig } from "./LeadColumnCustomizer";
+import { LeadColumnCustomizer, LeadColumnConfig, defaultLeadColumns } from "./LeadColumnCustomizer";
 import { LeadStatusFilter } from "./LeadStatusFilter";
 import { ConvertToDealModal } from "./ConvertToDealModal";
 import { LeadDeleteConfirmDialog } from "./LeadDeleteConfirmDialog";
@@ -22,6 +25,7 @@ import { SendEmailModal, EmailRecipient } from "./SendEmailModal";
 import { MeetingModal } from "./MeetingModal";
 import { TaskModal } from "./tasks/TaskModal";
 import { useTasks } from "@/hooks/useTasks";
+import { useQuery } from "@tanstack/react-query";
 
 interface Lead {
   id: string;
@@ -70,18 +74,18 @@ const defaultColumns: LeadColumnConfig[] = [{
   visible: true,
   order: 4
 }, {
-  field: 'contact_owner',
-  label: 'Lead Owner',
-  visible: true,
-  order: 5
-}, {
   field: 'lead_status',
   label: 'Lead Status',
   visible: true,
-  order: 6
+  order: 5
 }, {
   field: 'contact_source',
   label: 'Source',
+  visible: true,
+  order: 6
+}, {
+  field: 'contact_owner',
+  label: 'Lead Owner',
   visible: true,
   order: 7
 }];
@@ -93,6 +97,7 @@ interface LeadTableProps {
   setShowModal: (show: boolean) => void;
   selectedLeads: string[];
   setSelectedLeads: React.Dispatch<React.SetStateAction<string[]>>;
+  initialStatus?: string;
 }
 
 const LeadTable = ({
@@ -101,7 +106,8 @@ const LeadTable = ({
   showModal,
   setShowModal,
   selectedLeads,
-  setSelectedLeads
+  setSelectedLeads,
+  initialStatus = "New"
 }: LeadTableProps) => {
   const {
     toast
@@ -110,15 +116,64 @@ const LeadTable = ({
     logDelete
   } = useCRUDAudit();
   const { userRole } = useUserRole();
+  const [searchParams] = useSearchParams();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [filteredLeads, setFilteredLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("New");
+  const [statusFilter, setStatusFilter] = useState(initialStatus);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  
+  // Get owner parameter from URL - "me" means filter by current user
+  const ownerParam = searchParams.get('owner');
+  const fromDateParam = searchParams.get('from');
+  const toDateParam = searchParams.get('to');
+  const [ownerFilter, setOwnerFilter] = useState<string>("all");
+  const [dateFromFilter, setDateFromFilter] = useState<string | null>(fromDateParam);
+  const [dateToFilter, setDateToFilter] = useState<string | null>(toDateParam);
+
+  // Fetch current user ID for "me" filtering
+  useEffect(() => {
+    const fetchCurrentUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setCurrentUserId(user.id);
+        // If owner=me in URL, set the owner filter to current user's ID
+        if (ownerParam === 'me') {
+          setOwnerFilter(user.id);
+        }
+      }
+    };
+    fetchCurrentUser();
+  }, [ownerParam]);
+
+  // Sync statusFilter when initialStatus prop changes (from URL)
+  useEffect(() => {
+    setStatusFilter(initialStatus);
+  }, [initialStatus]);
+
+  // Sync ownerFilter when ownerParam changes
+  useEffect(() => {
+    if (ownerParam === 'me' && currentUserId) {
+      setOwnerFilter(currentUserId);
+    } else if (!ownerParam) {
+      setOwnerFilter('all');
+    }
+  }, [ownerParam, currentUserId]);
   const [editingLead, setEditingLead] = useState<Lead | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [leadToDelete, setLeadToDelete] = useState<Lead | null>(null);
-  const [columns, setColumns] = useState(defaultColumns);
+  
+  // Column preferences hook
+  const { columns, saveColumns, isSaving } = useColumnPreferences({
+    moduleName: 'leads',
+    defaultColumns: defaultLeadColumns,
+  });
+  const [localColumns, setLocalColumns] = useState<LeadColumnConfig[]>(columns);
+  
+  useEffect(() => {
+    setLocalColumns(columns);
+  }, [columns]);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(50);
   const [showConvertModal, setShowConvertModal] = useState(false);
@@ -136,6 +191,15 @@ const LeadTable = ({
   
   const { createTask } = useTasks();
 
+  // Fetch all profiles for owner dropdown
+  const { data: allProfiles = [] } = useQuery({
+    queryKey: ['all-profiles'],
+    queryFn: async () => {
+      const { data } = await supabase.from('profiles').select('id, full_name');
+      return data || [];
+    },
+  });
+
   useEffect(() => {
     fetchLeads();
   }, []);
@@ -144,6 +208,25 @@ const LeadTable = ({
     let filtered = leads.filter(lead => lead.lead_name?.toLowerCase().includes(searchTerm.toLowerCase()) || lead.company_name?.toLowerCase().includes(searchTerm.toLowerCase()) || lead.email?.toLowerCase().includes(searchTerm.toLowerCase()));
     if (statusFilter !== "all") {
       filtered = filtered.filter(lead => lead.lead_status === statusFilter);
+    }
+    if (ownerFilter !== "all") {
+      filtered = filtered.filter(lead => lead.created_by === ownerFilter);
+    }
+    
+    // Apply date range filtering
+    if (dateFromFilter) {
+      const fromDate = new Date(dateFromFilter);
+      filtered = filtered.filter(lead => {
+        if (!lead.created_time) return false;
+        return new Date(lead.created_time) >= fromDate;
+      });
+    }
+    if (dateToFilter) {
+      const toDate = new Date(dateToFilter);
+      filtered = filtered.filter(lead => {
+        if (!lead.created_time) return false;
+        return new Date(lead.created_time) <= toDate;
+      });
     }
 
     // Apply sorting
@@ -157,7 +240,7 @@ const LeadTable = ({
     }
     setFilteredLeads(filtered);
     setCurrentPage(1);
-  }, [leads, searchTerm, statusFilter, sortField, sortDirection]);
+  }, [leads, searchTerm, statusFilter, ownerFilter, dateFromFilter, dateToFilter, sortField, sortDirection]);
 
   const handleSort = (field: string) => {
     if (sortField === field) {
@@ -325,7 +408,7 @@ const LeadTable = ({
   const {
     displayNames
   } = useUserDisplayNames(createdByIds);
-  const visibleColumns = columns.filter(col => col.visible);
+  const visibleColumns = localColumns.filter(col => col.visible);
   const pageLeads = getCurrentPageLeads();
 
   const handleConvertToDeal = (lead: Lead) => {
@@ -373,6 +456,19 @@ const LeadTable = ({
             <Input placeholder="Search leads..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9" inputSize="control" />
           </div>
           <LeadStatusFilter value={statusFilter} onValueChange={setStatusFilter} />
+          <Select value={ownerFilter} onValueChange={setOwnerFilter}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="All Lead Owners" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Lead Owners</SelectItem>
+              {allProfiles.map((profile) => (
+                <SelectItem key={profile.id} value={profile.id}>
+                  {profile.full_name || 'Unknown'}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
@@ -549,7 +645,7 @@ const LeadTable = ({
       setEditingLead(null);
     }} />
 
-      <LeadColumnCustomizer open={showColumnCustomizer} onOpenChange={setShowColumnCustomizer} columns={columns} onColumnsChange={setColumns} />
+      <LeadColumnCustomizer open={showColumnCustomizer} onOpenChange={setShowColumnCustomizer} columns={localColumns} onColumnsChange={setLocalColumns} onSave={saveColumns} isSaving={isSaving} />
 
       <ConvertToDealModal open={showConvertModal} onOpenChange={setShowConvertModal} lead={leadToConvert} onSuccess={handleConvertSuccess} />
 

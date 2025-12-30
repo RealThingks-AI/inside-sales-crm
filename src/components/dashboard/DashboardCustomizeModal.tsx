@@ -4,19 +4,15 @@ import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { 
-  GripVertical, FileText, Users, Briefcase, Clock, TrendingUp, Zap, BarChart3, Calendar, Activity, Bell, 
-  Target, PieChart, LineChart, DollarSign, Mail, MessageSquare, CheckCircle, AlertTriangle, 
-  Globe, Building2, Star, Trophy, Gauge, ListTodo, PhoneCall, MapPin, Percent, ArrowUpRight, Filter
+  GripVertical, FileText, Users, Briefcase, Zap, Calendar, Activity, Bell, 
+  Mail, Building2, ListTodo, CalendarClock, ClipboardList
 } from "lucide-react";
 import { DragDropContext, Droppable, Draggable, DropResult } from "@hello-pangea/dnd";
 
 export type WidgetKey = 
-  | "leads" | "contacts" | "deals" | "actionItems" | "performance" | "quickActions" 
-  | "leadStatus" | "upcomingMeetings" | "recentActivities" | "taskReminders"
-  | "salesTarget" | "revenueChart" | "pipelineValue" | "conversionRate" | "emailStats"
-  | "teamActivity" | "completedTasks" | "overdueItems" | "topDeals" | "regionStats"
-  | "accountHealth" | "customerRetention" | "winLossRatio" | "salesVelocity" | "taskProgress"
-  | "callLog" | "geoDistribution" | "dealForecast" | "growthTrend" | "leadSources";
+  | "leads" | "contacts" | "deals" | "quickActions" 
+  | "upcomingMeetings" | "recentActivities" | "taskReminders" | "emailStats"
+  | "accountsSummary" | "weeklySummary" | "followUpsDue" | "todaysAgenda";
 
 export interface WidgetLayout {
   x: number;
@@ -38,45 +34,27 @@ export interface DashboardWidget {
 }
 
 const DEFAULT_WIDGETS: DashboardWidget[] = [
-  // Core stat widgets - 4 across the top row (3 cols each = 12 total)
+  // Row 1: Core stat widgets (4x3 each = 12 total)
   { key: "leads", label: "My Leads", icon: <FileText className="w-4 h-4" />, visible: true, defaultLayout: { x: 0, y: 0, w: 3, h: 2 } },
   { key: "contacts", label: "My Contacts", icon: <Users className="w-4 h-4" />, visible: true, defaultLayout: { x: 3, y: 0, w: 3, h: 2 } },
   { key: "deals", label: "My Deals", icon: <Briefcase className="w-4 h-4" />, visible: true, defaultLayout: { x: 6, y: 0, w: 3, h: 2 } },
-  { key: "actionItems", label: "Action Items", icon: <Clock className="w-4 h-4" />, visible: true, defaultLayout: { x: 9, y: 0, w: 3, h: 2 } },
-  // Second row - Quick Actions + Meetings + Task Reminders
-  { key: "quickActions", label: "Quick Actions", icon: <Zap className="w-4 h-4" />, visible: true, defaultLayout: { x: 0, y: 2, w: 4, h: 3 } },
-  { key: "upcomingMeetings", label: "Upcoming Meetings", icon: <Calendar className="w-4 h-4" />, visible: true, defaultLayout: { x: 4, y: 2, w: 4, h: 3 } },
-  { key: "taskReminders", label: "Task Reminders", icon: <Bell className="w-4 h-4" />, visible: true, defaultLayout: { x: 8, y: 2, w: 4, h: 3 } },
-  // Third row - Recent Activities + Performance + Lead Status
-  { key: "recentActivities", label: "Recent Activities", icon: <Activity className="w-4 h-4" />, visible: true, defaultLayout: { x: 0, y: 5, w: 4, h: 3 } },
-  { key: "performance", label: "My Performance", icon: <TrendingUp className="w-4 h-4" />, visible: true, defaultLayout: { x: 4, y: 5, w: 4, h: 3 } },
-  { key: "leadStatus", label: "Lead Status Overview", icon: <BarChart3 className="w-4 h-4" />, visible: true, defaultLayout: { x: 8, y: 5, w: 4, h: 3 } },
-  // Sales & Revenue widgets
-  { key: "salesTarget", label: "Sales Target", icon: <Target className="w-4 h-4" />, visible: false, defaultLayout: { x: 0, y: 8, w: 3, h: 2 } },
-  { key: "revenueChart", label: "Revenue Chart", icon: <LineChart className="w-4 h-4" />, visible: false, defaultLayout: { x: 3, y: 8, w: 6, h: 3 } },
-  { key: "pipelineValue", label: "Pipeline Value", icon: <DollarSign className="w-4 h-4" />, visible: false, defaultLayout: { x: 9, y: 8, w: 3, h: 2 } },
-  { key: "conversionRate", label: "Conversion Rate", icon: <Percent className="w-4 h-4" />, visible: false, defaultLayout: { x: 0, y: 10, w: 3, h: 2 } },
-  { key: "dealForecast", label: "Deal Forecast", icon: <ArrowUpRight className="w-4 h-4" />, visible: false, defaultLayout: { x: 3, y: 11, w: 6, h: 3 } },
-  // Communication widgets
-  { key: "emailStats", label: "Email Statistics", icon: <Mail className="w-4 h-4" />, visible: false, defaultLayout: { x: 9, y: 10, w: 3, h: 3 } },
-  { key: "callLog", label: "Call Log", icon: <PhoneCall className="w-4 h-4" />, visible: false, defaultLayout: { x: 0, y: 12, w: 3, h: 3 } },
-  // Team & Activity widgets
-  { key: "teamActivity", label: "Team Activity", icon: <MessageSquare className="w-4 h-4" />, visible: false, defaultLayout: { x: 3, y: 14, w: 4, h: 3 } },
-  { key: "completedTasks", label: "Completed Tasks", icon: <CheckCircle className="w-4 h-4" />, visible: false, defaultLayout: { x: 7, y: 14, w: 3, h: 2 } },
-  { key: "overdueItems", label: "Overdue Items", icon: <AlertTriangle className="w-4 h-4" />, visible: false, defaultLayout: { x: 10, y: 13, w: 3, h: 2 } },
-  { key: "taskProgress", label: "Task Progress", icon: <ListTodo className="w-4 h-4" />, visible: false, defaultLayout: { x: 0, y: 15, w: 3, h: 3 } },
-  // Analytics widgets
-  { key: "topDeals", label: "Top Deals", icon: <Trophy className="w-4 h-4" />, visible: false, defaultLayout: { x: 3, y: 17, w: 4, h: 3 } },
-  { key: "regionStats", label: "Region Statistics", icon: <Globe className="w-4 h-4" />, visible: false, defaultLayout: { x: 7, y: 16, w: 5, h: 3 } },
-  { key: "geoDistribution", label: "Geo Distribution", icon: <MapPin className="w-4 h-4" />, visible: false, defaultLayout: { x: 0, y: 18, w: 6, h: 3 } },
-  { key: "leadSources", label: "Lead Sources", icon: <Filter className="w-4 h-4" />, visible: false, defaultLayout: { x: 6, y: 19, w: 4, h: 3 } },
-  // Account & Customer widgets
-  { key: "accountHealth", label: "Account Health", icon: <Building2 className="w-4 h-4" />, visible: false, defaultLayout: { x: 10, y: 19, w: 3, h: 3 } },
-  { key: "customerRetention", label: "Customer Retention", icon: <Star className="w-4 h-4" />, visible: false, defaultLayout: { x: 0, y: 21, w: 3, h: 2 } },
-  // Performance widgets
-  { key: "winLossRatio", label: "Win/Loss Ratio", icon: <PieChart className="w-4 h-4" />, visible: false, defaultLayout: { x: 3, y: 22, w: 3, h: 2 } },
-  { key: "salesVelocity", label: "Sales Velocity", icon: <Gauge className="w-4 h-4" />, visible: false, defaultLayout: { x: 6, y: 22, w: 3, h: 2 } },
-  { key: "growthTrend", label: "Growth Trend", icon: <TrendingUp className="w-4 h-4" />, visible: false, defaultLayout: { x: 9, y: 22, w: 3, h: 3 } },
+  { key: "accountsSummary", label: "Accounts Summary", icon: <Building2 className="w-4 h-4" />, visible: true, defaultLayout: { x: 9, y: 0, w: 3, h: 2 } },
+  
+  // Row 2: Quick Actions
+  { key: "quickActions", label: "Quick Actions", icon: <Zap className="w-4 h-4" />, visible: true, defaultLayout: { x: 0, y: 2, w: 6, h: 2 } },
+  
+  // Row 3: Today's Agenda + Upcoming Meetings + Task Reminders
+  { key: "todaysAgenda", label: "Today's Agenda", icon: <CalendarClock className="w-4 h-4" />, visible: true, defaultLayout: { x: 0, y: 4, w: 4, h: 3 } },
+  { key: "upcomingMeetings", label: "Upcoming Meetings", icon: <Calendar className="w-4 h-4" />, visible: true, defaultLayout: { x: 4, y: 4, w: 4, h: 3 } },
+  { key: "taskReminders", label: "Task Reminders", icon: <Bell className="w-4 h-4" />, visible: true, defaultLayout: { x: 8, y: 4, w: 4, h: 3 } },
+  
+  // Row 4: Recent Activities + Email Stats
+  { key: "recentActivities", label: "Recent Activities", icon: <Activity className="w-4 h-4" />, visible: true, defaultLayout: { x: 0, y: 7, w: 6, h: 3 } },
+  { key: "emailStats", label: "Email Statistics", icon: <Mail className="w-4 h-4" />, visible: true, defaultLayout: { x: 6, y: 7, w: 6, h: 3 } },
+  
+  // Row 5: Weekly Summary + Follow-Ups Due
+  { key: "weeklySummary", label: "Weekly Summary", icon: <ListTodo className="w-4 h-4" />, visible: true, defaultLayout: { x: 0, y: 10, w: 6, h: 2 } },
+  { key: "followUpsDue", label: "Follow-Ups Due", icon: <ClipboardList className="w-4 h-4" />, visible: true, defaultLayout: { x: 6, y: 10, w: 6, h: 2 } },
 ];
 
 interface DashboardCustomizeModalProps {

@@ -4,17 +4,18 @@ import { useNavigate } from "react-router-dom";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/client";
 import { useAuth } from "@/hooks/useAuth";
-import { Skeleton } from "@/components/ui/skeleton";
 import { 
-  Users, FileText, Briefcase, TrendingUp, Clock, CheckCircle2, Plus, Settings2, Calendar, Activity, Bell, AlertCircle, Info, 
-  Target, DollarSign, PieChart, LineChart, Star, Trophy, PhoneCall, MessageSquare, ArrowUpRight, Mail, CheckCircle, AlertTriangle,
-  Globe, Building2, Gauge, ListTodo, MapPin, Percent, Filter, Check, X, RotateCcw
+  Users, FileText, Briefcase, Plus, Settings2, Calendar, Activity, Bell, 
+  Mail, Building2, ListTodo, CalendarClock, ClipboardList, Check, X, TrendingUp, TrendingDown, Minus, User
 } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
+import { useUserRole } from "@/hooks/useUserRole";
 import { useState, useRef, useEffect, useCallback } from "react";
 import { WidgetKey, WidgetLayoutConfig, DEFAULT_WIDGETS } from "./DashboardCustomizeModal";
 import { ResizableDashboard } from "./ResizableDashboard";
 import { toast } from "sonner";
-import { format, isBefore, addDays } from "date-fns";
+import { format, isBefore, addDays, startOfWeek, endOfWeek, isToday } from "date-fns";
+import { getMeetingStatus } from "@/utils/meetingStatus";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -31,7 +32,6 @@ const GRID_COLS = 12;
 
 // Utility: Compact layouts to remove all gaps (both vertical and horizontal)
 const compactLayoutsUtil = (layouts: WidgetLayoutConfig, visibleKeys: WidgetKey[]): WidgetLayoutConfig => {
-  // Convert to array and filter only visible widgets, sort by y then x
   const items = visibleKeys
     .filter(key => layouts[key])
     .map(key => ({ key, ...layouts[key] }))
@@ -40,7 +40,6 @@ const compactLayoutsUtil = (layouts: WidgetLayoutConfig, visibleKeys: WidgetKey[
   const compacted: WidgetLayoutConfig = {};
   const grid: boolean[][] = [];
   
-  // Helper to check if position is free
   const canPlace = (x: number, y: number, w: number, h: number): boolean => {
     if (x < 0 || x + w > GRID_COLS) return false;
     for (let dy = 0; dy < h; dy++) {
@@ -51,7 +50,6 @@ const compactLayoutsUtil = (layouts: WidgetLayoutConfig, visibleKeys: WidgetKey[
     return true;
   };
   
-  // Helper to mark grid cells as occupied
   const occupy = (x: number, y: number, w: number, h: number) => {
     for (let dy = 0; dy < h; dy++) {
       if (!grid[y + dy]) grid[y + dy] = new Array(GRID_COLS).fill(false);
@@ -61,11 +59,8 @@ const compactLayoutsUtil = (layouts: WidgetLayoutConfig, visibleKeys: WidgetKey[
     }
   };
   
-  // Place each item in the first available position (top-left priority)
   items.forEach(item => {
     let placed = false;
-    
-    // Scan from top-left to find first available position
     for (let y = 0; y < 100 && !placed; y++) {
       for (let x = 0; x <= GRID_COLS - item.w && !placed; x++) {
         if (canPlace(x, y, item.w, item.h)) {
@@ -75,8 +70,6 @@ const compactLayoutsUtil = (layouts: WidgetLayoutConfig, visibleKeys: WidgetKey[
         }
       }
     }
-    
-    // Fallback if somehow not placed
     if (!placed) {
       const fallbackY = Object.keys(compacted).length * 2;
       occupy(0, fallbackY, item.w, item.h);
@@ -89,50 +82,61 @@ const compactLayoutsUtil = (layouts: WidgetLayoutConfig, visibleKeys: WidgetKey[
 
 const UserDashboard = () => {
   const { user } = useAuth();
+  const { isAdmin } = useUserRole();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [isResizeMode, setIsResizeMode] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const [containerWidth, setContainerWidth] = useState(1200);
   
-  // Pending widget changes for batch add/remove
   const [pendingWidgetChanges, setPendingWidgetChanges] = useState<Set<WidgetKey>>(new Set());
-  
-  // Store original state when entering customize mode (for cancel functionality)
   const [originalState, setOriginalState] = useState<{
     visible: WidgetKey[];
     order: WidgetKey[];
     layouts: WidgetLayoutConfig;
   } | null>(null);
   
-  // Modal states for viewing records
+  // Modal states
   const [selectedTask, setSelectedTask] = useState<Task | null>(null);
   const [taskModalOpen, setTaskModalOpen] = useState(false);
   const [selectedMeeting, setSelectedMeeting] = useState<any>(null);
   const [meetingModalOpen, setMeetingModalOpen] = useState(false);
-  
-  // Quick Actions modal states
   const [leadModalOpen, setLeadModalOpen] = useState(false);
   const [contactModalOpen, setContactModalOpen] = useState(false);
   const [accountModalOpen, setAccountModalOpen] = useState(false);
   const [createMeetingModalOpen, setCreateMeetingModalOpen] = useState(false);
   
-  // Task operations
   const { createTask, updateTask } = useTasks();
 
-  // Measure container width for grid layout
   useEffect(() => {
     const updateWidth = () => {
       if (containerRef.current) {
-        setContainerWidth(containerRef.current.offsetWidth - 48); // subtract padding
+        // Get computed styles to account for padding
+        const styles = getComputedStyle(containerRef.current);
+        const paddingLeft = parseFloat(styles.paddingLeft) || 0;
+        const paddingRight = parseFloat(styles.paddingRight) || 0;
+        // Use inner width (excluding padding) for accurate grid sizing
+        const width = containerRef.current.clientWidth - paddingLeft - paddingRight;
+        setContainerWidth(Math.max(320, width));
       }
     };
-    updateWidth();
+    
+    // ResizeObserver for container size changes
+    const observer = new ResizeObserver(updateWidth);
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+    
+    // Also listen to window resize for viewport changes
     window.addEventListener('resize', updateWidth);
-    return () => window.removeEventListener('resize', updateWidth);
+    updateWidth();
+    
+    return () => {
+      observer.disconnect();
+      window.removeEventListener('resize', updateWidth);
+    };
   }, []);
   
-  // Fetch display name directly from profiles table
   const { data: userName } = useQuery({
     queryKey: ['user-profile-name', user?.id],
     queryFn: async () => {
@@ -152,14 +156,13 @@ const UserDashboard = () => {
     enabled: !!user?.id,
   });
 
-  // Fetch dashboard preferences
   const { data: dashboardPrefs } = useQuery({
     queryKey: ['dashboard-prefs', user?.id],
     queryFn: async () => {
       if (!user?.id) return null;
       const { data, error } = await supabase
         .from('dashboard_preferences')
-        .select('visible_widgets, card_order, layout_view')
+        .select('visible_widgets, card_order, widget_layouts, layout_view')
         .eq('user_id', user.id)
         .maybeSingle();
       if (error) throw error;
@@ -168,18 +171,21 @@ const UserDashboard = () => {
     enabled: !!user?.id,
   });
 
-  // Defaults (used before prefs load and when a user has no saved prefs yet)
   const defaultWidgetKeys = DEFAULT_WIDGETS.map((w) => w.key);
   const defaultVisibleWidgets = defaultWidgetKeys.filter(
     (k) => DEFAULT_WIDGETS.find((w) => w.key === k)?.visible
   );
 
-  // Local state so add/remove/drag/resize feels instant (not waiting on refetch)
   const [visibleWidgets, setVisibleWidgets] = useState<WidgetKey[]>(defaultVisibleWidgets);
   const [widgetOrder, setWidgetOrder] = useState<WidgetKey[]>(defaultWidgetKeys);
 
-  // Safely parse widget layouts - handle legacy string values gracefully
   const parseWidgetLayouts = (): WidgetLayoutConfig => {
+    // Prefer new widget_layouts column (jsonb)
+    const widgetLayoutsData = (dashboardPrefs as any)?.widget_layouts;
+    if (widgetLayoutsData && typeof widgetLayoutsData === "object") {
+      return widgetLayoutsData as WidgetLayoutConfig;
+    }
+    // Fallback to legacy layout_view parsing
     if (!dashboardPrefs?.layout_view) return {};
     if (typeof dashboardPrefs.layout_view === "object") {
       return dashboardPrefs.layout_view as WidgetLayoutConfig;
@@ -191,7 +197,7 @@ const UserDashboard = () => {
           return parsed as WidgetLayoutConfig;
         }
       } catch {
-        // Legacy string value like "grid" - ignore and use defaults
+        // Legacy string value (e.g., "overview")
       }
     }
     return {};
@@ -199,10 +205,8 @@ const UserDashboard = () => {
 
   const [widgetLayouts, setWidgetLayouts] = useState<WidgetLayoutConfig>(parseWidgetLayouts());
 
-  // When the logged-in user or saved prefs change, sync local state (user-specific)
   useEffect(() => {
     setIsResizeMode(false);
-
     if (!user?.id) return;
 
     const sanitizeKeys = (keys: WidgetKey[]) => {
@@ -227,124 +231,82 @@ const UserDashboard = () => {
       : defaultWidgetKeys;
 
     const nextVisible = sanitizeKeys(nextVisibleRaw);
-
-    // Order should be unique, valid, and contain all visible widgets
     const nextOrderBase = sanitizeKeys(nextOrderRaw);
     const missingVisible = nextVisible.filter((k) => !nextOrderBase.includes(k));
     const nextOrder = [...nextOrderBase, ...missingVisible];
 
-    // Compact layouts on load to remove any gaps
     const loadedLayouts = parseWidgetLayouts();
     const compactedLayouts = compactLayoutsUtil(loadedLayouts, nextVisible);
 
     setVisibleWidgets(nextVisible);
     setWidgetOrder(nextOrder);
     setWidgetLayouts(compactedLayouts);
-  }, [
-    user?.id,
-    dashboardPrefs?.visible_widgets,
-    dashboardPrefs?.card_order,
-    dashboardPrefs?.layout_view,
-  ]);
+  }, [user?.id, dashboardPrefs?.visible_widgets, dashboardPrefs?.card_order, (dashboardPrefs as any)?.widget_layouts, dashboardPrefs?.layout_view]);
 
-  // Save dashboard preferences
   const savePreferencesMutation = useMutation({
     mutationFn: async ({ widgets, order, layouts }: { widgets: WidgetKey[], order: WidgetKey[], layouts: WidgetLayoutConfig }) => {
-      if (!user?.id) {
-        throw new Error("User not authenticated");
-      }
-      
+      if (!user?.id) throw new Error("User not authenticated");
       const { data, error } = await supabase
         .from('dashboard_preferences')
         .upsert({
           user_id: user.id,
           visible_widgets: widgets,
           card_order: order,
-          layout_view: JSON.stringify(layouts),
+          widget_layouts: layouts,
           updated_at: new Date().toISOString(),
-        }, { onConflict: 'user_id' })
+        } as any, { onConflict: 'user_id' })
         .select();
-      
-      if (error) {
-        console.error("Error saving preferences:", error);
-        throw error;
-      }
-      
+      if (error) throw error;
       return data;
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['dashboard-prefs', user?.id] });
       toast.success("Dashboard layout saved");
     },
-    onError: (error) => {
-      console.error("Mutation error:", error);
+    onError: () => {
       toast.error("Failed to save layout");
     },
   });
 
-  // Handle layout changes from ResizableDashboard - auto-compact after each change
   const handleLayoutChange = useCallback((newLayouts: WidgetLayoutConfig) => {
-    // Apply compaction after every drag/resize to remove gaps
     const compacted = compactLayoutsUtil(newLayouts, visibleWidgets);
     setWidgetLayouts(compacted);
   }, [visibleWidgets]);
 
-  // Handle widget removal - stage the change, and only persist on "Done"
-  const handleWidgetRemove = useCallback(
-    (key: WidgetKey) => {
-      const isCurrentlyVisible = visibleWidgets.includes(key);
-
-      setPendingWidgetChanges((prev) => {
-        const next = new Set(prev);
-        const wasPending = next.has(key);
-
-        if (wasPending) {
-          next.delete(key);
-        } else {
-          next.add(key);
-        }
-
-        const isNowPending = !wasPending;
-        if (isCurrentlyVisible) {
-          toast(isNowPending ? "Marked for removal (will apply on Save)" : "Removal undone");
-        } else {
-          toast(isNowPending ? "Marked to add (will apply on Save)" : "Add undone");
-        }
-
-        return next;
-      });
-    },
-    [visibleWidgets]
-  );
-
-  // Toggle widget in pending changes (for batch add/remove)
-  const togglePendingWidget = useCallback((key: WidgetKey) => {
-    setPendingWidgetChanges(prev => {
+  const handleWidgetRemove = useCallback((key: WidgetKey) => {
+    const isCurrentlyVisible = visibleWidgets.includes(key);
+    setPendingWidgetChanges((prev) => {
       const next = new Set(prev);
       if (next.has(key)) {
         next.delete(key);
       } else {
         next.add(key);
       }
+      toast(isCurrentlyVisible 
+        ? (next.has(key) ? "Marked for removal" : "Removal undone")
+        : (next.has(key) ? "Marked to add" : "Add undone"));
+      return next;
+    });
+  }, [visibleWidgets]);
+
+  const togglePendingWidget = useCallback((key: WidgetKey) => {
+    setPendingWidgetChanges(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
       return next;
     });
   }, []);
 
-  // Check if a widget will be visible (current state + pending changes)
   const willWidgetBeVisible = useCallback((key: WidgetKey) => {
     const isCurrentlyVisible = visibleWidgets.includes(key);
     const isPending = pendingWidgetChanges.has(key);
-    // If pending, toggle the current state
     return isPending ? !isCurrentlyVisible : isCurrentlyVisible;
   }, [visibleWidgets, pendingWidgetChanges]);
 
-
-  // Find next available grid position for a widget
   const findNextGridPosition = useCallback((existingLayouts: WidgetLayoutConfig, widgetWidth: number, widgetHeight: number) => {
     const COLS = 12;
     const grid: boolean[][] = [];
-    
-    // Build occupancy grid from existing layouts
     Object.values(existingLayouts).forEach(layout => {
       if (!layout) return;
       for (let row = layout.y; row < layout.y + layout.h; row++) {
@@ -354,8 +316,6 @@ const UserDashboard = () => {
         }
       }
     });
-    
-    // Find first position where widget fits
     for (let y = 0; y < 100; y++) {
       if (!grid[y]) grid[y] = new Array(COLS).fill(false);
       for (let x = 0; x <= COLS - widgetWidth; x++) {
@@ -372,114 +332,40 @@ const UserDashboard = () => {
     return { x: 0, y: Object.keys(existingLayouts).length * 2 };
   }, []);
 
-  // Apply pending widget changes
-  const applyPendingChanges = useCallback(() => {
-    if (pendingWidgetChanges.size === 0) return;
-
-    let nextVisible = [...visibleWidgets];
-    let nextOrder = [...widgetOrder];
-    let nextLayouts = { ...widgetLayouts };
-
-    pendingWidgetChanges.forEach(key => {
-      const isCurrentlyVisible = visibleWidgets.includes(key);
-      
-      if (isCurrentlyVisible) {
-        // Remove widget
-        nextVisible = nextVisible.filter(w => w !== key);
-        nextOrder = nextOrder.filter(w => w !== key);
-        delete nextLayouts[key];
-      } else {
-        // Add widget - use consistent 3x2 size and find next available slot
-        nextVisible.push(key);
-        if (!nextOrder.includes(key)) {
-          nextOrder.push(key);
-        }
-        
-        const widgetW = 3;
-        const widgetH = 2;
-        const position = findNextGridPosition(nextLayouts, widgetW, widgetH);
-
-        nextLayouts[key] = {
-          x: position.x,
-          y: position.y,
-          w: widgetW,
-          h: widgetH,
-        };
-      }
-    });
-
-    // Compact layouts to remove empty spaces
-    const compactedLayouts = compactLayoutsUtil(nextLayouts, nextVisible);
-
-    setVisibleWidgets(nextVisible);
-    setWidgetOrder(nextOrder);
-    setWidgetLayouts(compactedLayouts);
-    setPendingWidgetChanges(new Set());
-  }, [pendingWidgetChanges, visibleWidgets, widgetOrder, widgetLayouts, findNextGridPosition]);
-
-  // Save layout and exit resize mode
   const handleSaveLayout = () => {
-    // Get final state after applying changes
     let finalVisible = [...visibleWidgets];
     let finalOrder = [...widgetOrder];
     let finalLayouts = { ...widgetLayouts };
     
-    // Apply pending changes to final state
     pendingWidgetChanges.forEach(key => {
       const isCurrentlyVisible = visibleWidgets.includes(key);
-      
       if (isCurrentlyVisible) {
         finalVisible = finalVisible.filter(w => w !== key);
         finalOrder = finalOrder.filter(w => w !== key);
         delete finalLayouts[key];
       } else {
         finalVisible.push(key);
-        if (!finalOrder.includes(key)) {
-          finalOrder.push(key);
-        }
-        
-        const widgetW = 3;
-        const widgetH = 2;
-        const position = findNextGridPosition(finalLayouts, widgetW, widgetH);
-
-        finalLayouts[key] = {
-          x: position.x,
-          y: position.y,
-          w: widgetW,
-          h: widgetH,
-        };
+        if (!finalOrder.includes(key)) finalOrder.push(key);
+        const position = findNextGridPosition(finalLayouts, 3, 2);
+        finalLayouts[key] = { x: position.x, y: position.y, w: 3, h: 2 };
       }
     });
     
-    // Compact layouts to remove empty spaces
     const compactedLayouts = compactLayoutsUtil(finalLayouts, finalVisible);
-    
-    // Update local state
     setVisibleWidgets(finalVisible);
     setWidgetOrder(finalOrder);
     setWidgetLayouts(compactedLayouts);
-    
-    savePreferencesMutation.mutate({
-      widgets: finalVisible,
-      order: finalOrder,
-      layouts: compactedLayouts
-    });
+    savePreferencesMutation.mutate({ widgets: finalVisible, order: finalOrder, layouts: compactedLayouts });
     setPendingWidgetChanges(new Set());
     setOriginalState(null);
     setIsResizeMode(false);
   };
 
-  // Enter customize mode - store original state for cancel
   const handleEnterCustomizeMode = useCallback(() => {
-    setOriginalState({
-      visible: [...visibleWidgets],
-      order: [...widgetOrder],
-      layouts: { ...widgetLayouts }
-    });
+    setOriginalState({ visible: [...visibleWidgets], order: [...widgetOrder], layouts: { ...widgetLayouts } });
     setIsResizeMode(true);
   }, [visibleWidgets, widgetOrder, widgetLayouts]);
 
-  // Cancel customize mode - restore original state
   const handleCancelCustomize = useCallback(() => {
     if (originalState) {
       setVisibleWidgets(originalState.visible);
@@ -492,147 +378,191 @@ const UserDashboard = () => {
     toast.info("Changes discarded");
   }, [originalState]);
 
-  // Reset to default layout
-  const handleResetToDefault = useCallback(() => {
-    const defaultVisible = DEFAULT_WIDGETS.filter(w => w.visible).map(w => w.key);
-    const defaultOrder = DEFAULT_WIDGETS.map(w => w.key);
-    const defaultLayouts: WidgetLayoutConfig = {};
-    
-    // Create default grid layout
-    let x = 0, y = 0;
-    defaultVisible.forEach(key => {
-      if (x + 3 > GRID_COLS) {
-        x = 0;
-        y += 2;
-      }
-      defaultLayouts[key] = { x, y, w: 3, h: 2 };
-      x += 3;
-    });
-    
-    const compacted = compactLayoutsUtil(defaultLayouts, defaultVisible);
-    setVisibleWidgets(defaultVisible);
-    setWidgetOrder(defaultOrder);
-    setWidgetLayouts(compacted);
-    setPendingWidgetChanges(new Set());
-    toast.info("Layout reset to default");
-  }, []);
-
-  // Keyboard shortcuts for customize mode
   useEffect(() => {
     if (!isResizeMode) return;
-    
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         e.preventDefault();
         handleCancelCustomize();
       }
     };
-    
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isResizeMode, handleCancelCustomize]);
 
-  // Fetch user's leads count
+  // ================== DATA QUERIES ==================
+
+  // Leads data - enhanced
   const { data: leadsData, isLoading: leadsLoading } = useQuery({
-    queryKey: ['user-leads-count', user?.id],
+    queryKey: ['user-leads-enhanced', user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase.from('leads').select('id, lead_status').eq('created_by', user?.id);
+      const { data, error } = await supabase.from('leads').select('id, lead_status, lead_name, created_time').eq('created_by', user?.id);
       if (error) throw error;
+      const leads = data || [];
+      const recentLead = leads.sort((a, b) => new Date(b.created_time || 0).getTime() - new Date(a.created_time || 0).getTime())[0];
       return {
-        total: data?.length || 0,
-        new: data?.filter(l => l.lead_status === 'New').length || 0,
-        contacted: data?.filter(l => l.lead_status === 'Contacted').length || 0,
-        qualified: data?.filter(l => l.lead_status === 'Qualified').length || 0
+        total: leads.length,
+        new: leads.filter(l => l.lead_status === 'New').length,
+        attempted: leads.filter(l => l.lead_status === 'Attempted').length,
+        followUp: leads.filter(l => l.lead_status === 'Follow-up').length,
+        qualified: leads.filter(l => l.lead_status === 'Qualified').length,
+        recentLead: recentLead?.lead_name || null
       };
     },
     enabled: !!user?.id
   });
 
-  // Fetch user's contacts count
+  // Contacts data - enhanced with contact_source
   const { data: contactsData, isLoading: contactsLoading } = useQuery({
-    queryKey: ['user-contacts-count', user?.id],
+    queryKey: ['user-contacts-enhanced', user?.id],
     queryFn: async () => {
-      const { count, error } = await supabase.from('contacts').select('id', { count: 'exact', head: true }).eq('created_by', user?.id);
+      const { data, error } = await supabase.from('contacts').select('id, contact_name, email, phone_no, segment, contact_source, created_time').eq('created_by', user?.id);
       if (error) throw error;
-      return count || 0;
+      const contacts = data || [];
+      const bySource = {
+        website: contacts.filter(c => c.contact_source?.toLowerCase() === 'website').length,
+        referral: contacts.filter(c => c.contact_source?.toLowerCase() === 'referral').length,
+        linkedin: contacts.filter(c => c.contact_source?.toLowerCase() === 'linkedin').length,
+        other: contacts.filter(c => !['website', 'referral', 'linkedin'].includes(c.contact_source?.toLowerCase() || '')).length,
+      };
+      return { total: contacts.length, bySource };
     },
     enabled: !!user?.id
   });
 
-  // Fetch user's deals count and value
+  // Deals data - enhanced with stages RFQ, Offered, Won, Lost
   const { data: dealsData, isLoading: dealsLoading } = useQuery({
-    queryKey: ['user-deals-count', user?.id],
+    queryKey: ['user-deals-enhanced', user?.id],
     queryFn: async () => {
-      const { data, error } = await supabase.from('deals').select('id, stage, total_contract_value, lead_owner, created_by');
+      const { data, error } = await supabase.from('deals').select('id, stage, total_contract_value, deal_name, created_by, lead_owner, expected_closing_date');
       if (error) throw error;
-      
-      const userDeals = (data || []).filter(d => 
-        d.created_by === user?.id || d.lead_owner === user?.id
-      );
-      
-      const totalValue = userDeals.reduce((sum, d) => sum + (d.total_contract_value || 0), 0);
+      const userDeals = (data || []).filter(d => d.created_by === user?.id || d.lead_owner === user?.id);
+      const activeDeals = userDeals.filter(d => !['Won', 'Lost', 'Dropped'].includes(d.stage));
       const wonDeals = userDeals.filter(d => d.stage === 'Won');
-      const lostDeals = userDeals.filter(d => d.stage === 'Lost');
+      const totalPipeline = activeDeals.reduce((sum, d) => sum + (d.total_contract_value || 0), 0);
       const wonValue = wonDeals.reduce((sum, d) => sum + (d.total_contract_value || 0), 0);
+      
       return {
         total: userDeals.length,
+        active: activeDeals.length,
         won: wonDeals.length,
-        lost: lostDeals.length,
-        totalValue,
+        lost: userDeals.filter(d => d.stage === 'Lost').length,
+        totalPipeline,
         wonValue,
-        active: userDeals.filter(d => !['Won', 'Lost', 'Dropped'].includes(d.stage)).length
+        byStage: {
+          rfq: userDeals.filter(d => d.stage === 'RFQ').length,
+          offered: userDeals.filter(d => d.stage === 'Offered').length,
+          won: wonDeals.length,
+          lost: userDeals.filter(d => d.stage === 'Lost').length,
+        }
       };
     },
     enabled: !!user?.id
   });
 
-  // Fetch user's pending action items
-  const { data: actionItemsData, isLoading: actionItemsLoading } = useQuery({
-    queryKey: ['user-action-items', user?.id],
+  // Accounts data - enhanced with status counts
+  const { data: accountsData, isLoading: accountsLoading } = useQuery({
+    queryKey: ['user-accounts-enhanced', user?.id],
     queryFn: async () => {
-      const { data: dealItems, error: dealError } = await supabase.from('deal_action_items').select('id, status, due_date').eq('assigned_to', user?.id).eq('status', 'Open');
-      if (dealError) throw dealError;
-      const { data: leadItems, error: leadError } = await supabase.from('lead_action_items').select('id, status, due_date').eq('assigned_to', user?.id).eq('status', 'Open');
-      if (leadError) throw leadError;
-      const allItems = [...(dealItems || []), ...(leadItems || [])];
-      const overdue = allItems.filter(item => item.due_date && new Date(item.due_date) < new Date()).length;
-      return { total: allItems.length, overdue };
+      const { data, error } = await supabase.from('accounts').select('id, company_name, segment, status, created_at, total_revenue').eq('created_by', user?.id);
+      if (error) throw error;
+      const accounts = data || [];
+      const byStatus = {
+        new: accounts.filter(a => a.status?.toLowerCase() === 'new').length,
+        working: accounts.filter(a => a.status?.toLowerCase() === 'working').length,
+        hot: accounts.filter(a => a.status?.toLowerCase() === 'hot').length,
+        nurture: accounts.filter(a => a.status?.toLowerCase() === 'nurture').length,
+      };
+      return { total: accounts.length, byStatus };
     },
     enabled: !!user?.id
   });
 
-  // Fetch upcoming meetings
-  const { data: upcomingMeetings } = useQuery({
-    queryKey: ['user-upcoming-meetings', user?.id],
+  // Upcoming meetings - enhanced with status counts using getMeetingStatus for consistency
+  const { data: upcomingMeetings, isLoading: meetingsLoading } = useQuery({
+    queryKey: ['user-upcoming-meetings-enhanced', user?.id],
     queryFn: async () => {
-      const now = new Date().toISOString();
-      const weekFromNow = addDays(new Date(), 7).toISOString();
       const { data, error } = await supabase
         .from('meetings')
-        .select('id, subject, start_time, status')
+        .select('id, subject, start_time, end_time, status, attendees')
+        .eq('created_by', user?.id);
+      if (error) throw error;
+      const meetings = data || [];
+      const now = new Date();
+      
+      // Use getMeetingStatus for consistent status calculation (same as Meetings page)
+      const byStatus = {
+        scheduled: meetings.filter(m => getMeetingStatus(m, now) === 'scheduled').length,
+        ongoing: meetings.filter(m => getMeetingStatus(m, now) === 'ongoing').length,
+        completed: meetings.filter(m => getMeetingStatus(m, now) === 'completed').length,
+        cancelled: meetings.filter(m => getMeetingStatus(m, now) === 'cancelled').length,
+      };
+      
+      // For upcoming meetings list, only show those that are scheduled or ongoing
+      const upcoming = meetings
+        .filter(m => ['scheduled', 'ongoing'].includes(getMeetingStatus(m, now)))
+        .sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime())
+        .slice(0, 5)
+        .map(m => ({
+          ...m,
+          isToday: isToday(new Date(m.start_time)),
+          attendeeCount: Array.isArray(m.attendees) ? m.attendees.length : 0
+        }));
+      return { meetings: upcoming, total: meetings.length, byStatus };
+    },
+    enabled: !!user?.id
+  });
+
+  // Today's meetings for agenda
+  const { data: todaysMeetings } = useQuery({
+    queryKey: ['user-todays-meetings', user?.id],
+    queryFn: async () => {
+      const todayStart = new Date();
+      todayStart.setHours(0, 0, 0, 0);
+      const todayEnd = new Date();
+      todayEnd.setHours(23, 59, 59, 999);
+      const { data, error } = await supabase
+        .from('meetings')
+        .select('id, subject, start_time, end_time, status')
         .eq('created_by', user?.id)
-        .gte('start_time', now)
-        .lte('start_time', weekFromNow)
-        .order('start_time', { ascending: true })
-        .limit(5);
+        .gte('start_time', todayStart.toISOString())
+        .lte('start_time', todayEnd.toISOString())
+        .order('start_time', { ascending: true });
       if (error) throw error;
       return data || [];
     },
     enabled: !!user?.id
   });
 
-  // Fetch task reminders
-  const { data: taskReminders } = useQuery({
-    queryKey: ['user-task-reminders', user?.id],
+  // Today's tasks for agenda
+  const { data: todaysTasks } = useQuery({
+    queryKey: ['user-todays-tasks', user?.id],
     queryFn: async () => {
-      if (!user?.id) return [];
-      const weekFromNow = format(addDays(new Date(), 7), 'yyyy-MM-dd');
+      const today = format(new Date(), 'yyyy-MM-dd');
       const { data, error } = await supabase
         .from('tasks')
         .select('id, title, due_date, priority, status')
-        .or(`assigned_to.eq.${user.id},created_by.eq.${user.id}`)
+        .or(`assigned_to.eq.${user?.id},created_by.eq.${user?.id}`)
         .in('status', ['open', 'in_progress'])
-        .lte('due_date', weekFromNow)
+        .eq('due_date', today)
+        .order('priority', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    },
+    enabled: !!user?.id
+  });
+
+  // Overdue tasks for agenda
+  const { data: overdueTasks } = useQuery({
+    queryKey: ['user-overdue-tasks', user?.id],
+    queryFn: async () => {
+      const today = format(new Date(), 'yyyy-MM-dd');
+      const { data, error } = await supabase
+        .from('tasks')
+        .select('id, title, due_date, priority, status')
+        .or(`assigned_to.eq.${user?.id},created_by.eq.${user?.id}`)
+        .in('status', ['open', 'in_progress'])
+        .lt('due_date', today)
         .order('due_date', { ascending: true })
         .limit(5);
       if (error) throw error;
@@ -641,106 +571,200 @@ const UserDashboard = () => {
     enabled: !!user?.id
   });
 
-  // Fetch completed tasks count
-  const { data: completedTasksCount } = useQuery({
-    queryKey: ['user-completed-tasks', user?.id],
+  // Task reminders with status counts
+  const { data: taskReminders, isLoading: tasksLoading } = useQuery({
+    queryKey: ['user-task-reminders-enhanced', user?.id],
     queryFn: async () => {
-      if (!user?.id) return 0;
-      const { count, error } = await supabase
+      const { data, error } = await supabase
         .from('tasks')
-        .select('id', { count: 'exact', head: true })
-        .or(`assigned_to.eq.${user.id},created_by.eq.${user.id}`)
-        .eq('status', 'completed');
+        .select('id, title, due_date, priority, status')
+        .or(`assigned_to.eq.${user?.id},created_by.eq.${user?.id}`);
       if (error) throw error;
-      return count || 0;
-    },
-    enabled: !!user?.id
-  });
-
-  // Fetch overdue items
-  const { data: overdueItemsCount } = useQuery({
-    queryKey: ['user-overdue-items', user?.id],
-    queryFn: async () => {
-      if (!user?.id) return 0;
+      const tasks = data || [];
+      const byStatus = {
+        open: tasks.filter(t => t.status === 'open').length,
+        inProgress: tasks.filter(t => t.status === 'in_progress').length,
+        completed: tasks.filter(t => t.status === 'completed').length,
+        cancelled: tasks.filter(t => t.status === 'cancelled').length,
+      };
       const today = format(new Date(), 'yyyy-MM-dd');
-      const { count, error } = await supabase
-        .from('tasks')
-        .select('id', { count: 'exact', head: true })
-        .or(`assigned_to.eq.${user.id},created_by.eq.${user.id}`)
-        .in('status', ['open', 'in_progress'])
-        .lt('due_date', today);
-      if (error) throw error;
-      return count || 0;
+      const overdue = tasks.filter(t => t.due_date && t.due_date < today && ['open', 'in_progress'].includes(t.status)).length;
+      const dueToday = tasks.filter(t => t.due_date === today).length;
+      const highPriority = tasks.filter(t => t.priority === 'high' && ['open', 'in_progress'].includes(t.status)).length;
+      return { tasks: tasks.slice(0, 5), overdue, dueToday, highPriority, total: tasks.length, byStatus };
     },
     enabled: !!user?.id
   });
 
-  // Fetch email stats
+  // Email stats - enhanced
   const { data: emailStats } = useQuery({
-    queryKey: ['user-email-stats', user?.id],
+    queryKey: ['user-email-stats-enhanced', user?.id],
     queryFn: async () => {
-      if (!user?.id) return { sent: 0, opened: 0, clicked: 0 };
       const { data, error } = await supabase
         .from('email_history')
-        .select('id, status, open_count, click_count')
-        .eq('sent_by', user.id);
+        .select('id, status, open_count, click_count, subject, sent_at')
+        .eq('sent_by', user?.id)
+        .order('sent_at', { ascending: false });
       if (error) throw error;
-      const sent = data?.length || 0;
-      const opened = data?.filter(e => (e.open_count || 0) > 0).length || 0;
-      const clicked = data?.filter(e => (e.click_count || 0) > 0).length || 0;
-      return { sent, opened, clicked };
+      const emails = data || [];
+      const sent = emails.length;
+      const opened = emails.filter(e => (e.open_count || 0) > 0).length;
+      const clicked = emails.filter(e => (e.click_count || 0) > 0).length;
+      const openRate = sent > 0 ? Math.round((opened / sent) * 100) : 0;
+      const clickRate = sent > 0 ? Math.round((clicked / sent) * 100) : 0;
+      const recentEmail = emails[0];
+      return { sent, opened, clicked, openRate, clickRate, recentSubject: recentEmail?.subject || null };
     },
     enabled: !!user?.id
   });
 
-  // Fetch top deals
-  const { data: topDeals } = useQuery({
-    queryKey: ['user-top-deals', user?.id],
+  // Follow-ups due
+  const { data: followUpsDue } = useQuery({
+    queryKey: ['user-follow-ups-due', user?.id],
     queryFn: async () => {
-      if (!user?.id) return [];
       const { data, error } = await supabase
-        .from('deals')
-        .select('id, deal_name, total_contract_value, stage')
-        .or(`created_by.eq.${user.id},lead_owner.eq.${user.id}`)
-        .not('stage', 'in', '("Lost","Dropped")')
-        .order('total_contract_value', { ascending: false })
+        .from('meeting_follow_ups')
+        .select('id, title, status, due_date, meeting_id')
+        .eq('assigned_to', user?.id)
+        .eq('status', 'pending')
+        .order('due_date', { ascending: true })
         .limit(5);
+      if (error) throw error;
+      const followUps = data || [];
+      const today = format(new Date(), 'yyyy-MM-dd');
+      const overdue = followUps.filter(f => f.due_date && f.due_date < today).length;
+      return { followUps, total: followUps.length, overdue };
+    },
+    enabled: !!user?.id
+  });
+
+  // Weekly summary view mode state
+  const [weeklySummaryView, setWeeklySummaryView] = useState<'thisWeek' | 'allTime'>('thisWeek');
+  
+  // Recent activities toggle state (for admin only)
+  const [showAllActivities, setShowAllActivities] = useState(false);
+
+  // Weekly summary with comparison data
+  const { data: weeklySummary } = useQuery({
+    queryKey: ['user-weekly-summary-enhanced', user?.id],
+    queryFn: async () => {
+      const now = new Date();
+      const weekStart = startOfWeek(now, { weekStartsOn: 1 });
+      const weekEnd = endOfWeek(now, { weekStartsOn: 1 });
+      const startStr = weekStart.toISOString();
+      const endStr = weekEnd.toISOString();
+      
+      // Last week dates
+      const lastWeekStart = new Date(weekStart);
+      lastWeekStart.setDate(lastWeekStart.getDate() - 7);
+      const lastWeekEnd = new Date(weekEnd);
+      lastWeekEnd.setDate(lastWeekEnd.getDate() - 7);
+      const lastStartStr = lastWeekStart.toISOString();
+      const lastEndStr = lastWeekEnd.toISOString();
+      
+      // Fetch this week, last week, and all time in parallel
+      const [
+        // This week
+        leadsThisWeek, contactsThisWeek, accountsThisWeek, dealsThisWeek, meetingsThisWeek, tasksThisWeek,
+        // Last week
+        leadsLastWeek, contactsLastWeek, accountsLastWeek, dealsLastWeek, meetingsLastWeek, tasksLastWeek,
+        // All time
+        leadsAllTime, contactsAllTime, accountsAllTime, dealsAllTime, meetingsAllTime, tasksAllTime
+      ] = await Promise.all([
+        // This week
+        supabase.from('leads').select('id', { count: 'exact', head: true }).eq('created_by', user?.id).gte('created_time', startStr).lte('created_time', endStr),
+        supabase.from('contacts').select('id', { count: 'exact', head: true }).eq('created_by', user?.id).gte('created_time', startStr).lte('created_time', endStr),
+        supabase.from('accounts').select('id', { count: 'exact', head: true }).eq('created_by', user?.id).gte('created_at', startStr).lte('created_at', endStr),
+        supabase.from('deals').select('id', { count: 'exact', head: true }).eq('created_by', user?.id).gte('created_at', startStr).lte('created_at', endStr),
+        supabase.from('meetings').select('id', { count: 'exact', head: true }).eq('created_by', user?.id).eq('status', 'completed').gte('start_time', startStr).lte('start_time', endStr),
+        supabase.from('tasks').select('id', { count: 'exact', head: true }).or(`assigned_to.eq.${user?.id},created_by.eq.${user?.id}`).eq('status', 'completed').gte('completed_at', startStr).lte('completed_at', endStr),
+        // Last week
+        supabase.from('leads').select('id', { count: 'exact', head: true }).eq('created_by', user?.id).gte('created_time', lastStartStr).lte('created_time', lastEndStr),
+        supabase.from('contacts').select('id', { count: 'exact', head: true }).eq('created_by', user?.id).gte('created_time', lastStartStr).lte('created_time', lastEndStr),
+        supabase.from('accounts').select('id', { count: 'exact', head: true }).eq('created_by', user?.id).gte('created_at', lastStartStr).lte('created_at', lastEndStr),
+        supabase.from('deals').select('id', { count: 'exact', head: true }).eq('created_by', user?.id).gte('created_at', lastStartStr).lte('created_at', lastEndStr),
+        supabase.from('meetings').select('id', { count: 'exact', head: true }).eq('created_by', user?.id).eq('status', 'completed').gte('start_time', lastStartStr).lte('start_time', lastEndStr),
+        supabase.from('tasks').select('id', { count: 'exact', head: true }).or(`assigned_to.eq.${user?.id},created_by.eq.${user?.id}`).eq('status', 'completed').gte('completed_at', lastStartStr).lte('completed_at', lastEndStr),
+        // All time
+        supabase.from('leads').select('id', { count: 'exact', head: true }).eq('created_by', user?.id),
+        supabase.from('contacts').select('id', { count: 'exact', head: true }).eq('created_by', user?.id),
+        supabase.from('accounts').select('id', { count: 'exact', head: true }).eq('created_by', user?.id),
+        supabase.from('deals').select('id', { count: 'exact', head: true }).eq('created_by', user?.id),
+        supabase.from('meetings').select('id', { count: 'exact', head: true }).eq('created_by', user?.id).eq('status', 'completed'),
+        supabase.from('tasks').select('id', { count: 'exact', head: true }).or(`assigned_to.eq.${user?.id},created_by.eq.${user?.id}`).eq('status', 'completed'),
+      ]);
+      
+      return {
+        thisWeek: {
+          leads: leadsThisWeek.count || 0,
+          contacts: contactsThisWeek.count || 0,
+          accounts: accountsThisWeek.count || 0,
+          deals: dealsThisWeek.count || 0,
+          meetings: meetingsThisWeek.count || 0,
+          tasks: tasksThisWeek.count || 0,
+        },
+        lastWeek: {
+          leads: leadsLastWeek.count || 0,
+          contacts: contactsLastWeek.count || 0,
+          accounts: accountsLastWeek.count || 0,
+          deals: dealsLastWeek.count || 0,
+          meetings: meetingsLastWeek.count || 0,
+          tasks: tasksLastWeek.count || 0,
+        },
+        allTime: {
+          leads: leadsAllTime.count || 0,
+          contacts: contactsAllTime.count || 0,
+          accounts: accountsAllTime.count || 0,
+          deals: dealsAllTime.count || 0,
+          meetings: meetingsAllTime.count || 0,
+          tasks: tasksAllTime.count || 0,
+        },
+        weekStart,
+        weekEnd,
+      };
+    },
+    enabled: !!user?.id
+  });
+
+  // Recent activities
+  const { data: userProfiles } = useQuery({
+    queryKey: ['all-user-profiles'],
+    queryFn: async () => {
+      const { data, error } = await supabase.from('profiles').select('id, full_name');
       if (error) throw error;
       return data || [];
     },
-    enabled: !!user?.id
+    staleTime: 5 * 60 * 1000,
   });
 
-  // Fetch accounts data
-  const { data: accountsData } = useQuery({
-    queryKey: ['user-accounts-summary', user?.id],
-    queryFn: async () => {
-      if (!user?.id) return { total: 0, healthy: 0, atRisk: 0 };
-      const { data, error } = await supabase
-        .from('accounts')
-        .select('id, score, status')
-        .eq('created_by', user.id);
-      if (error) throw error;
-      const total = data?.length || 0;
-      const healthy = data?.filter(a => (a.score || 0) >= 70).length || 0;
-      const atRisk = data?.filter(a => (a.score || 0) < 40).length || 0;
-      return { total, healthy, atRisk };
-    },
-    enabled: !!user?.id
-  });
+  const getDisplayName = (value: any): string => {
+    if (!value || value === 'empty' || value === null) return 'empty';
+    if (typeof value !== 'string') return String(value);
+    const uuidPattern = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    if (uuidPattern.test(value)) {
+      const profile = userProfiles?.find(p => p.id === value);
+      return profile?.full_name || 'Unknown User';
+    }
+    return value;
+  };
 
-  // Fetch recent activities
   const { data: recentActivities } = useQuery({
-    queryKey: ['user-recent-activities', user?.id],
+    queryKey: ['user-recent-activities', user?.id, userProfiles, showAllActivities],
     queryFn: async () => {
-      const { data, error } = await supabase
+      let query = supabase
         .from('security_audit_log')
         .select('id, action, resource_type, resource_id, created_at, details, user_id')
-        .eq('user_id', user?.id)
         .in('action', ['CREATE', 'UPDATE', 'DELETE'])
         .in('resource_type', ['contacts', 'leads', 'deals', 'accounts', 'meetings', 'tasks'])
         .order('created_at', { ascending: false })
-        .limit(5);
+        .limit(10);
+      
+      // Only filter by user_id if not showing all activities
+      if (!showAllActivities) {
+        query = query.eq('user_id', user?.id);
+      }
+      
+      const { data, error } = await query;
       if (error) throw error;
 
       return (data || []).map(log => {
@@ -752,31 +776,22 @@ const UserDashboard = () => {
           if (changedFields.length > 0) {
             const fieldSummary = changedFields.slice(0, 2).map(field => {
               const change = details.field_changes[field];
-              const oldVal = change?.old ?? 'empty';
-              const newVal = change?.new ?? 'empty';
+              const oldVal = getDisplayName(change?.old ?? 'empty');
+              const newVal = getDisplayName(change?.new ?? 'empty');
               return `${field}: "${oldVal}" → "${newVal}"`;
             }).join(', ');
             detailedSubject = `Updated ${log.resource_type} - ${fieldSummary}${changedFields.length > 2 ? ` (+${changedFields.length - 2} more)` : ''}`;
-          }
-        } else if (log.action === 'UPDATE' && details?.updated_fields) {
-          const updatedFields = Object.keys(details.updated_fields);
-          if (updatedFields.length > 0) {
-            detailedSubject = `Updated ${log.resource_type} - Changed: ${updatedFields.slice(0, 3).join(', ')}${updatedFields.length > 3 ? ` (+${updatedFields.length - 3} more)` : ''}`;
           }
         } else if (log.action === 'CREATE' && details?.record_data) {
           const recordName = details.record_data.lead_name || details.record_data.contact_name || 
                             details.record_data.deal_name || details.record_data.company_name || 
                             details.record_data.title || details.record_data.subject || '';
-          if (recordName) {
-            detailedSubject = `Created ${log.resource_type} - "${recordName}"`;
-          }
+          if (recordName) detailedSubject = `Created ${log.resource_type} - "${recordName}"`;
         } else if (log.action === 'DELETE' && details?.deleted_data) {
           const recordName = details.deleted_data.lead_name || details.deleted_data.contact_name || 
                             details.deleted_data.deal_name || details.deleted_data.company_name || 
                             details.deleted_data.title || details.deleted_data.subject || '';
-          if (recordName) {
-            detailedSubject = `Deleted ${log.resource_type} - "${recordName}"`;
-          }
+          if (recordName) detailedSubject = `Deleted ${log.resource_type} - "${recordName}"`;
         }
         
         return {
@@ -785,10 +800,11 @@ const UserDashboard = () => {
           activity_type: log.action,
           activity_date: log.created_at,
           resource_type: log.resource_type,
+          user_id: log.user_id,
         };
       });
     },
-    enabled: !!user?.id
+    enabled: !!user?.id && !!userProfiles
   });
 
   const formatCurrency = (amount: number) => {
@@ -800,7 +816,7 @@ const UserDashboard = () => {
     }).format(amount);
   };
 
-  const isLoading = leadsLoading || contactsLoading || dealsLoading || actionItemsLoading;
+  const isLoading = leadsLoading || contactsLoading || dealsLoading || accountsLoading;
 
   if (isLoading) {
     return (
@@ -818,584 +834,860 @@ const UserDashboard = () => {
     );
   }
 
-  // Placeholder widget component
-  const PlaceholderWidget = ({ title, icon, description }: { title: string; icon: React.ReactNode; description: string }) => (
-    <Card className="h-full animate-fade-in">
-      <CardHeader className="flex flex-row items-center justify-between pb-2">
-        <CardTitle className="text-sm font-medium">{title}</CardTitle>
-        {icon}
-      </CardHeader>
-      <CardContent>
-        <div className="flex flex-col items-center justify-center py-4 text-center">
-          <div className="text-muted-foreground/50 mb-2">{icon}</div>
-          <p className="text-sm text-muted-foreground">{description}</p>
-        </div>
-      </CardContent>
-    </Card>
-  );
-
   const renderWidget = (key: WidgetKey) => {
     switch (key) {
       case "leads":
         return (
-          <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer animate-fade-in" onClick={() => !isResizeMode && navigate('/leads')}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">My Leads</CardTitle>
-              <FileText className="w-4 h-4 text-blue-600" />
+          <Card className="h-full hover:shadow-lg transition-shadow animate-fade-in overflow-hidden flex flex-col">
+            <CardHeader className="flex flex-row items-center justify-between py-2 px-3 flex-shrink-0">
+              <CardTitle className="text-sm font-medium truncate">My Leads</CardTitle>
+              <Button variant="outline" size="sm" className="h-6 text-xs gap-1 flex-shrink-0" onClick={() => !isResizeMode && setLeadModalOpen(true)}>
+                <Plus className="w-3 h-3" /> Add Lead
+              </Button>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{leadsData?.total || 0}</div>
-              <p className="text-xs text-muted-foreground">{leadsData?.new || 0} new, {leadsData?.qualified || 0} qualified</p>
+            <CardContent className="px-3 pb-3 pt-0 flex-1 min-h-0 flex flex-col">
+              <div className="grid grid-cols-2 gap-1.5 flex-1 min-h-0">
+                <div 
+                  className="text-center p-1.5 bg-blue-50 dark:bg-blue-950/20 rounded cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-950/40 transition-colors flex flex-col items-center justify-center min-h-0"
+                  onClick={(e) => { e.stopPropagation(); navigate('/leads?status=New&owner=me'); }}
+                >
+                  <p className="text-base font-bold text-blue-600 leading-tight">{leadsData?.new || 0}</p>
+                  <p className="text-[9px] text-muted-foreground leading-tight">New</p>
+                </div>
+                <div 
+                  className="text-center p-1.5 bg-yellow-50 dark:bg-yellow-950/20 rounded cursor-pointer hover:bg-yellow-100 dark:hover:bg-yellow-950/40 transition-colors flex flex-col items-center justify-center min-h-0"
+                  onClick={(e) => { e.stopPropagation(); navigate('/leads?status=Attempted&owner=me'); }}
+                >
+                  <p className="text-base font-bold text-yellow-600 leading-tight">{leadsData?.attempted || 0}</p>
+                  <p className="text-[9px] text-muted-foreground leading-tight">Attempted</p>
+                </div>
+                <div 
+                  className="text-center p-1.5 bg-orange-50 dark:bg-orange-950/20 rounded cursor-pointer hover:bg-orange-100 dark:hover:bg-orange-950/40 transition-colors flex flex-col items-center justify-center min-h-0"
+                  onClick={(e) => { e.stopPropagation(); navigate('/leads?status=Follow-up&owner=me'); }}
+                >
+                  <p className="text-base font-bold text-orange-600 leading-tight">{leadsData?.followUp || 0}</p>
+                  <p className="text-[9px] text-muted-foreground leading-tight">Follow-Up</p>
+                </div>
+                <div 
+                  className="text-center p-1.5 bg-green-50 dark:bg-green-950/20 rounded cursor-pointer hover:bg-green-100 dark:hover:bg-green-950/40 transition-colors flex flex-col items-center justify-center min-h-0"
+                  onClick={(e) => { e.stopPropagation(); navigate('/leads?status=Qualified&owner=me'); }}
+                >
+                  <p className="text-base font-bold text-green-600 leading-tight">{leadsData?.qualified || 0}</p>
+                  <p className="text-[9px] text-muted-foreground leading-tight">Qualified</p>
+                </div>
+              </div>
             </CardContent>
           </Card>
         );
+
       case "contacts":
         return (
-          <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer animate-fade-in" onClick={() => !isResizeMode && navigate('/contacts')}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">My Contacts</CardTitle>
-              <Users className="w-4 h-4 text-green-600" />
+          <Card className="h-full hover:shadow-lg transition-shadow animate-fade-in overflow-hidden flex flex-col">
+            <CardHeader className="flex flex-row items-center justify-between py-2 px-3 flex-shrink-0">
+              <CardTitle className="text-sm font-medium truncate">My Contacts</CardTitle>
+              <Button variant="outline" size="sm" className="h-6 text-xs gap-1 flex-shrink-0" onClick={() => !isResizeMode && setContactModalOpen(true)}>
+                <Plus className="w-3 h-3" /> Add Contact
+              </Button>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{contactsData || 0}</div>
-              <p className="text-xs text-muted-foreground">Total contacts created</p>
+            <CardContent className="px-3 pb-3 pt-0 flex-1 min-h-0 flex flex-col">
+              <div className="grid grid-cols-2 gap-1.5 flex-1 min-h-0">
+                <div 
+                  className="text-center p-1.5 bg-blue-50 dark:bg-blue-950/20 rounded cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-950/40 transition-colors flex flex-col items-center justify-center min-h-0"
+                  onClick={(e) => { e.stopPropagation(); navigate('/contacts?source=Website&owner=me'); }}
+                >
+                  <p className="text-base font-bold text-blue-600 leading-tight">{contactsData?.bySource?.website || 0}</p>
+                  <p className="text-[9px] text-muted-foreground leading-tight">Website</p>
+                </div>
+                <div 
+                  className="text-center p-1.5 bg-purple-50 dark:bg-purple-950/20 rounded cursor-pointer hover:bg-purple-100 dark:hover:bg-purple-950/40 transition-colors flex flex-col items-center justify-center min-h-0"
+                  onClick={(e) => { e.stopPropagation(); navigate('/contacts?source=Referral&owner=me'); }}
+                >
+                  <p className="text-base font-bold text-purple-600 leading-tight">{contactsData?.bySource?.referral || 0}</p>
+                  <p className="text-[9px] text-muted-foreground leading-tight">Referral</p>
+                </div>
+                <div 
+                  className="text-center p-1.5 bg-cyan-50 dark:bg-cyan-950/20 rounded cursor-pointer hover:bg-cyan-100 dark:hover:bg-cyan-950/40 transition-colors flex flex-col items-center justify-center min-h-0"
+                  onClick={(e) => { e.stopPropagation(); navigate('/contacts?source=LinkedIn&owner=me'); }}
+                >
+                  <p className="text-base font-bold text-cyan-600 leading-tight">{contactsData?.bySource?.linkedin || 0}</p>
+                  <p className="text-[9px] text-muted-foreground leading-tight">LinkedIn</p>
+                </div>
+                <div 
+                  className="text-center p-1.5 bg-gray-50 dark:bg-gray-950/20 rounded cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-950/40 transition-colors flex flex-col items-center justify-center min-h-0"
+                  onClick={(e) => { e.stopPropagation(); navigate('/contacts?source=Other&owner=me'); }}
+                >
+                  <p className="text-base font-bold text-gray-600 leading-tight">{contactsData?.bySource?.other || 0}</p>
+                  <p className="text-[9px] text-muted-foreground leading-tight">Other</p>
+                </div>
+              </div>
             </CardContent>
           </Card>
         );
+
       case "deals":
         return (
-          <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer animate-fade-in" onClick={() => !isResizeMode && navigate('/deals')}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">My Deals</CardTitle>
-              <Briefcase className="w-4 h-4 text-purple-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{dealsData?.total || 0}</div>
-              <p className="text-xs text-muted-foreground">{dealsData?.active || 0} active, {dealsData?.won || 0} won</p>
-            </CardContent>
-          </Card>
-        );
-      case "actionItems":
-        return (
-          <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer animate-fade-in" onClick={() => !isResizeMode && navigate('/tasks')}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium flex items-center gap-2">
-                Action Items
-                <span className="text-xs font-normal text-muted-foreground">(click to view)</span>
-              </CardTitle>
-              <Clock className="w-4 h-4 text-orange-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{actionItemsData?.total || 0}</div>
-              <p className={`text-xs ${(actionItemsData?.overdue || 0) > 0 ? 'text-destructive font-medium' : 'text-muted-foreground'}`}>
-                {(actionItemsData?.overdue || 0) > 0 ? `⚠️ ${actionItemsData?.overdue} overdue` : 'No overdue items'}
-              </p>
-            </CardContent>
-          </Card>
-        );
-      case "upcomingMeetings":
-        return (
-          <Card className="h-full animate-fade-in">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <Calendar className="w-5 h-5 text-primary" />
-                Upcoming Meetings
-              </CardTitle>
-              <Button variant="ghost" size="sm" onClick={() => !isResizeMode && navigate('/meetings')}>
+          <Card className="h-full hover:shadow-lg transition-shadow animate-fade-in overflow-hidden flex flex-col">
+            <CardHeader className="flex flex-row items-center justify-between py-2 px-3 flex-shrink-0">
+              <CardTitle className="text-sm font-medium truncate">My Deals</CardTitle>
+              <Button variant="outline" size="sm" className="h-6 text-xs gap-1 flex-shrink-0" onClick={() => !isResizeMode && navigate('/deals')}>
                 View All
               </Button>
             </CardHeader>
-            <CardContent>
-              {upcomingMeetings && upcomingMeetings.length > 0 ? (
-                <div className="space-y-3">
-                  {upcomingMeetings.map((meeting) => (
-                    <div 
-                      key={meeting.id} 
-                      className="flex items-center justify-between p-2 rounded-lg bg-muted/50 cursor-pointer hover:bg-muted/80 transition-colors"
-                      onClick={() => { if (!isResizeMode) { setSelectedMeeting(meeting); setMeetingModalOpen(true); }}}
-                    >
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium truncate">{meeting.subject}</p>
-                        <p className="text-xs text-muted-foreground">
-                          {format(new Date(meeting.start_time), 'dd/MM/yyyy HH:mm')}
-                        </p>
-                      </div>
-                      <span className={`text-xs px-2 py-1 rounded-full flex-shrink-0 ${
-                        meeting.status === 'scheduled' ? 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400' : 'bg-gray-100 text-gray-700 dark:bg-gray-800 dark:text-gray-300'
-                      }`}>
-                        {meeting.status}
-                      </span>
-                    </div>
-                  ))}
+            <CardContent className="px-3 pb-3 pt-0 flex-1 min-h-0 flex flex-col">
+              <div className="grid grid-cols-2 gap-1.5 flex-1 min-h-0">
+                <div 
+                  className="text-center p-1.5 bg-blue-50 dark:bg-blue-950/20 rounded cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-950/40 transition-colors flex flex-col items-center justify-center min-h-0"
+                  onClick={(e) => { e.stopPropagation(); navigate('/deals?stage=RFQ&owner=me'); }}
+                >
+                  <p className="text-base font-bold text-blue-600 leading-tight">{dealsData?.byStage?.rfq || 0}</p>
+                  <p className="text-[9px] text-muted-foreground leading-tight">RFQ</p>
                 </div>
-              ) : (
-                <EmptyState
-                  title="No meetings scheduled"
-                  description="Schedule your first meeting to stay organized"
-                  illustration="calendar"
-                  actionLabel="Schedule Meeting"
-                  onAction={() => !isResizeMode && setCreateMeetingModalOpen(true)}
-                  variant="compact"
-                />
-              )}
-            </CardContent>
-          </Card>
-        );
-      case "taskReminders":
-        return (
-          <Card className="h-full animate-fade-in">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <Bell className="w-5 h-5 text-primary" />
-                Task Reminders
-              </CardTitle>
-              <Button variant="ghost" size="sm" onClick={() => !isResizeMode && navigate('/tasks')}>
-                View All
-              </Button>
-            </CardHeader>
-            <CardContent>
-              {taskReminders && taskReminders.length > 0 ? (
-                <div className="space-y-3">
-                  {taskReminders.map((task) => {
-                    const taskDueDate = task.due_date ? new Date(task.due_date) : null;
-                    const today = new Date();
-                    today.setHours(0, 0, 0, 0);
-                    const isOverdue = taskDueDate && isBefore(taskDueDate, today);
-                    const isDueToday = taskDueDate && taskDueDate.toDateString() === new Date().toDateString();
-                    
-                    return (
-                      <div 
-                        key={task.id} 
-                        className={`flex items-center justify-between p-2 rounded-lg cursor-pointer hover:ring-2 hover:ring-primary/20 transition-all ${
-                          isOverdue 
-                            ? 'bg-red-100 dark:bg-red-900/30 border border-red-300 dark:border-red-700' 
-                            : isDueToday 
-                              ? 'bg-orange-50 dark:bg-orange-900/20 border border-orange-200 dark:border-orange-800'
-                              : 'bg-muted/50'
-                        }`}
-                        onClick={() => { if (!isResizeMode) { setSelectedTask(task as Task); setTaskModalOpen(true); }}}
-                        title="Click to view task details"
-                      >
-                        <div className="min-w-0 flex-1">
-                          <p className={`text-sm font-medium truncate ${isOverdue ? 'text-red-800 dark:text-red-200' : ''}`}>
-                            {task.title}
-                          </p>
-                          <p className={`text-xs ${isOverdue ? 'text-red-600 dark:text-red-400 font-medium' : isDueToday ? 'text-orange-600 dark:text-orange-400' : 'text-muted-foreground'}`}>
-                            <AlertCircle className={`w-3 h-3 inline mr-1 ${isOverdue || isDueToday ? '' : 'hidden'}`} />
-                            {isOverdue ? 'OVERDUE - ' : isDueToday ? 'Due Today - ' : ''}
-                            Due: {task.due_date ? format(new Date(task.due_date), 'dd/MM/yyyy') : 'No date'}
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 flex-shrink-0">
-                          {isOverdue && (
-                            <span className="text-xs px-2 py-1 rounded-full bg-red-500 text-white font-semibold">
-                              OVERDUE
-                            </span>
-                          )}
-                          <span className={`text-xs px-2 py-1 rounded-full font-medium ${
-                            task.priority === 'high' ? 'bg-red-500 text-white' :
-                            task.priority === 'medium' ? 'bg-amber-500 text-white' :
-                            'bg-slate-500 text-white'
-                          }`}>
-                            {task.priority}
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
+                <div 
+                  className="text-center p-1.5 bg-yellow-50 dark:bg-yellow-950/20 rounded cursor-pointer hover:bg-yellow-100 dark:hover:bg-yellow-950/40 transition-colors flex flex-col items-center justify-center min-h-0"
+                  onClick={(e) => { e.stopPropagation(); navigate('/deals?stage=Offered&owner=me'); }}
+                >
+                  <p className="text-base font-bold text-yellow-600 leading-tight">{dealsData?.byStage?.offered || 0}</p>
+                  <p className="text-[9px] text-muted-foreground leading-tight">Offered</p>
                 </div>
-              ) : (
-                <EmptyState
-                  title="No pending tasks"
-                  description="You're all caught up! Create a new task to get started"
-                  illustration="tasks"
-                  actionLabel="Create Task"
-                  onAction={() => { if (!isResizeMode) { setSelectedTask(null); setTaskModalOpen(true); }}}
-                  variant="compact"
-                />
-              )}
-            </CardContent>
-          </Card>
-        );
-      case "recentActivities":
-        return (
-          <Card className="h-full animate-fade-in">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <Activity className="w-5 h-5 text-primary" />
-                Recent Activities
-              </CardTitle>
-              <Button variant="ghost" size="sm" onClick={() => !isResizeMode && navigate('/notifications')}>
-                View All
-              </Button>
-            </CardHeader>
-            <CardContent className="relative">
-              {recentActivities && recentActivities.length > 0 ? (
-                <div className="space-y-3 max-h-[300px] overflow-y-auto scrollbar-thin pr-1">
-                  {recentActivities.slice(0, 5).map((activity) => (
-                    <div key={activity.id} className="flex items-center gap-3 p-2 rounded-lg bg-muted/50 group" title={activity.subject}>
-                      <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                        <Activity className="w-4 h-4 text-primary" />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <p className="text-sm font-medium line-clamp-2 group-hover:line-clamp-none transition-all" title={activity.subject}>
-                          {activity.subject}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {activity.activity_type} • {format(new Date(activity.activity_date), 'dd/MM/yyyy HH:mm')}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
+                <div 
+                  className="text-center p-1.5 bg-green-50 dark:bg-green-950/20 rounded cursor-pointer hover:bg-green-100 dark:hover:bg-green-950/40 transition-colors flex flex-col items-center justify-center min-h-0"
+                  onClick={(e) => { e.stopPropagation(); navigate('/deals?stage=Won&owner=me'); }}
+                >
+                  <p className="text-base font-bold text-green-600 leading-tight">{dealsData?.byStage?.won || 0}</p>
+                  <p className="text-[9px] text-muted-foreground leading-tight">Won</p>
                 </div>
-              ) : (
-                <EmptyState
-                  title="No recent activities"
-                  description="Activities will appear here as you work with leads, contacts, and deals"
-                  illustration="activities"
-                  variant="compact"
-                />
-              )}
-            </CardContent>
-          </Card>
-        );
-      case "performance":
-        const hasWonRevenue = (dealsData?.wonValue || 0) > 0;
-        return (
-          <Card className="h-full animate-fade-in">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <TrendingUp className="w-5 h-5 text-primary" />
-                My Performance
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex justify-between items-center p-3 bg-muted/50 rounded-lg">
-                <div>
-                  <p className="text-sm text-muted-foreground">Total Pipeline Value</p>
-                  <p className="text-xl font-bold">{formatCurrency(dealsData?.totalValue || 0)}</p>
+                <div 
+                  className="text-center p-1.5 bg-red-50 dark:bg-red-950/20 rounded cursor-pointer hover:bg-red-100 dark:hover:bg-red-950/40 transition-colors flex flex-col items-center justify-center min-h-0"
+                  onClick={(e) => { e.stopPropagation(); navigate('/deals?stage=Lost&owner=me'); }}
+                >
+                  <p className="text-base font-bold text-red-600 leading-tight">{dealsData?.byStage?.lost || 0}</p>
+                  <p className="text-[9px] text-muted-foreground leading-tight">Lost</p>
                 </div>
-                <Briefcase className="w-8 h-8 text-muted-foreground/50" />
-              </div>
-              <div className={`flex justify-between items-center p-3 rounded-lg ${
-                hasWonRevenue 
-                  ? 'bg-green-50 dark:bg-green-950/20' 
-                  : 'bg-muted/50'
-              }`}>
-                <div>
-                  <p className="text-sm text-muted-foreground">Won Revenue</p>
-                  <p className={`text-xl font-bold ${hasWonRevenue ? 'text-green-600' : 'text-muted-foreground'}`}>
-                    {formatCurrency(dealsData?.wonValue || 0)}
-                  </p>
-                </div>
-                {hasWonRevenue ? (
-                  <CheckCircle2 className="w-8 h-8 text-green-600/50" />
-                ) : (
-                  <TrendingUp className="w-8 h-8 text-muted-foreground/30" />
-                )}
               </div>
             </CardContent>
           </Card>
         );
+
+      case "accountsSummary":
+        return (
+          <Card className="h-full hover:shadow-lg transition-shadow animate-fade-in overflow-hidden flex flex-col">
+            <CardHeader className="flex flex-row items-center justify-between py-2 px-3 flex-shrink-0">
+              <CardTitle className="text-sm font-medium truncate">My Accounts</CardTitle>
+              <Button variant="outline" size="sm" className="h-6 text-xs gap-1 flex-shrink-0" onClick={() => !isResizeMode && setAccountModalOpen(true)}>
+                <Plus className="w-3 h-3" /> Add Account
+              </Button>
+            </CardHeader>
+            <CardContent className="px-3 pb-3 pt-0 flex-1 min-h-0 flex flex-col">
+              <div className="grid grid-cols-2 gap-1.5 flex-1 min-h-0">
+                <div 
+                  className="text-center p-1.5 bg-blue-50 dark:bg-blue-950/20 rounded cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-950/40 transition-colors flex flex-col items-center justify-center min-h-0"
+                  onClick={(e) => { e.stopPropagation(); navigate('/accounts?status=New&owner=me'); }}
+                >
+                  <p className="text-base font-bold text-blue-600 leading-tight">{accountsData?.byStatus?.new || 0}</p>
+                  <p className="text-[9px] text-muted-foreground leading-tight">New</p>
+                </div>
+                <div 
+                  className="text-center p-1.5 bg-yellow-50 dark:bg-yellow-950/20 rounded cursor-pointer hover:bg-yellow-100 dark:hover:bg-yellow-950/40 transition-colors flex flex-col items-center justify-center min-h-0"
+                  onClick={(e) => { e.stopPropagation(); navigate('/accounts?status=Working&owner=me'); }}
+                >
+                  <p className="text-base font-bold text-yellow-600 leading-tight">{accountsData?.byStatus?.working || 0}</p>
+                  <p className="text-[9px] text-muted-foreground leading-tight">Working</p>
+                </div>
+                <div 
+                  className="text-center p-1.5 bg-red-50 dark:bg-red-950/20 rounded cursor-pointer hover:bg-red-100 dark:hover:bg-red-950/40 transition-colors flex flex-col items-center justify-center min-h-0"
+                  onClick={(e) => { e.stopPropagation(); navigate('/accounts?status=Hot&owner=me'); }}
+                >
+                  <p className="text-base font-bold text-red-600 leading-tight">{accountsData?.byStatus?.hot || 0}</p>
+                  <p className="text-[9px] text-muted-foreground leading-tight">Hot</p>
+                </div>
+                <div 
+                  className="text-center p-1.5 bg-green-50 dark:bg-green-950/20 rounded cursor-pointer hover:bg-green-100 dark:hover:bg-green-950/40 transition-colors flex flex-col items-center justify-center min-h-0"
+                  onClick={(e) => { e.stopPropagation(); navigate('/accounts?status=Nurture&owner=me'); }}
+                >
+                  <p className="text-base font-bold text-green-600 leading-tight">{accountsData?.byStatus?.nurture || 0}</p>
+                  <p className="text-[9px] text-muted-foreground leading-tight">Nurture</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        );
+
       case "quickActions":
         return (
-          <Card className="h-full animate-fade-in">
-            <CardHeader>
-              <CardTitle className="text-base font-medium">Quick Actions</CardTitle>
+          <Card className="h-full animate-fade-in overflow-hidden flex flex-col">
+            <CardHeader className="py-2 px-3 flex-shrink-0">
+              <CardTitle className="text-sm font-medium truncate">Quick Actions</CardTitle>
             </CardHeader>
-            <CardContent className="space-y-2">
-              <Button 
-                variant="outline" 
-                className="w-full justify-start gap-2 hover:bg-primary hover:text-primary-foreground transition-colors" 
-                onClick={() => !isResizeMode && setLeadModalOpen(true)}
-              >
-                <Plus className="w-4 h-4" />
-                Add New Lead
-              </Button>
-              <Button 
-                variant="outline" 
-                className="w-full justify-start gap-2 hover:bg-primary hover:text-primary-foreground transition-colors" 
-                onClick={() => !isResizeMode && setContactModalOpen(true)}
-              >
-                <Plus className="w-4 h-4" />
-                Add New Contact
-              </Button>
-              <Button 
-                variant="outline" 
-                className="w-full justify-start gap-2 hover:bg-primary hover:text-primary-foreground transition-colors" 
-                onClick={() => !isResizeMode && setAccountModalOpen(true)}
-              >
-                <Plus className="w-4 h-4" />
-                Add New Account
-              </Button>
-              <Button 
-                variant="outline" 
-                className="w-full justify-start gap-2 hover:bg-primary hover:text-primary-foreground transition-colors" 
-                onClick={() => !isResizeMode && setCreateMeetingModalOpen(true)}
-              >
-                <Plus className="w-4 h-4" />
-                Schedule Meeting
-              </Button>
+            <CardContent className="px-3 pb-3 pt-0 flex-1 min-h-0 flex flex-col">
+              <div className="grid grid-cols-2 gap-1.5 flex-1 min-h-0">
+                <Button variant="outline" size="sm" className="justify-start gap-1.5 h-auto min-h-[28px] text-xs py-1" onClick={() => !isResizeMode && setLeadModalOpen(true)}>
+                  <Plus className="w-3 h-3 flex-shrink-0" /> Lead
+                </Button>
+                <Button variant="outline" size="sm" className="justify-start gap-1.5 h-auto min-h-[28px] text-xs py-1" onClick={() => !isResizeMode && setContactModalOpen(true)}>
+                  <Plus className="w-3 h-3 flex-shrink-0" /> Contact
+                </Button>
+                <Button variant="outline" size="sm" className="justify-start gap-1.5 h-auto min-h-[28px] text-xs py-1" onClick={() => !isResizeMode && setAccountModalOpen(true)}>
+                  <Plus className="w-3 h-3 flex-shrink-0" /> Account
+                </Button>
+                <Button variant="outline" size="sm" className="justify-start gap-1.5 h-auto min-h-[28px] text-xs py-1" onClick={() => !isResizeMode && setCreateMeetingModalOpen(true)}>
+                  <Plus className="w-3 h-3 flex-shrink-0" /> Meeting
+                </Button>
+              </div>
             </CardContent>
           </Card>
         );
-      case "leadStatus":
+
+      case "todaysAgenda":
+        const totalAgendaItems = (todaysMeetings?.length || 0) + (todaysTasks?.length || 0) + (overdueTasks?.length || 0);
+        const handleQuickCompleteTask = async (taskId: string, e: React.MouseEvent) => {
+          e.stopPropagation();
+          try {
+            await supabase.from('tasks').update({ status: 'completed', completed_at: new Date().toISOString() }).eq('id', taskId);
+            queryClient.invalidateQueries({ queryKey: ['user-todays-tasks', user?.id] });
+            queryClient.invalidateQueries({ queryKey: ['user-overdue-tasks', user?.id] });
+            queryClient.invalidateQueries({ queryKey: ['user-task-reminders-enhanced', user?.id] });
+            toast.success("Task completed");
+          } catch (error) {
+            toast.error("Failed to complete task");
+          }
+        };
         return (
-          <Card className="h-full animate-fade-in">
-            <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                Lead Status Overview
+          <Card className="h-full animate-fade-in overflow-hidden flex flex-col">
+            <CardHeader className="flex flex-row items-center justify-between py-2 px-3 flex-shrink-0">
+              <CardTitle className="flex items-center gap-1.5 text-sm font-medium truncate">
+                <CalendarClock className="w-4 h-4 text-primary flex-shrink-0" />
+                Today's Agenda
+              </CardTitle>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                <span className="text-[9px] text-muted-foreground">{format(new Date(), 'EEE, MMM d')}</span>
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <Info className="w-4 h-4 text-muted-foreground cursor-help" />
+                      <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => !isResizeMode && navigate('/tasks')}>
+                        <ListTodo className="w-3 h-3" />
+                      </Button>
                     </TooltipTrigger>
-                    <TooltipContent>
-                      <p>Shows your leads categorized by current status</p>
-                    </TooltipContent>
+                    <TooltipContent>View all tasks</TooltipContent>
                   </Tooltip>
                 </TooltipProvider>
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                <div className="text-center p-4 bg-blue-50 dark:bg-blue-950/20 rounded-lg">
-                  <p className="text-2xl font-bold text-blue-600">{leadsData?.new || 0}</p>
-                  <p className="text-sm text-muted-foreground">New</p>
-                </div>
-                <div className="text-center p-4 bg-yellow-50 dark:bg-yellow-950/20 rounded-lg">
-                  <p className="text-2xl font-bold text-yellow-600">{leadsData?.contacted || 0}</p>
-                  <p className="text-sm text-muted-foreground">Contacted</p>
-                </div>
-                <div className="text-center p-4 bg-green-50 dark:bg-green-950/20 rounded-lg">
-                  <p className="text-2xl font-bold text-green-600">{leadsData?.qualified || 0}</p>
-                  <p className="text-sm text-muted-foreground">Qualified</p>
-                </div>
-                <div className="text-center p-4 bg-purple-50 dark:bg-purple-950/20 rounded-lg">
-                  <p className="text-2xl font-bold text-purple-600">{leadsData?.total || 0}</p>
-                  <p className="text-sm text-muted-foreground">Total Leads</p>
-                </div>
               </div>
-            </CardContent>
-          </Card>
-        );
-      
-      // Additional widgets with real data
-      case "salesTarget":
-        return (
-          <Card className="h-full animate-fade-in">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Sales Target</CardTitle>
-              <Target className="w-4 h-4 text-amber-600" />
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(dealsData?.wonValue || 0)}</div>
-              <p className="text-xs text-muted-foreground">Won this period</p>
-              <div className="mt-3 h-2 bg-muted rounded-full overflow-hidden">
-                <div className="h-full bg-amber-500 rounded-full" style={{ width: `${Math.min(((dealsData?.wonValue || 0) / 100000) * 100, 100)}%` }} />
-              </div>
-            </CardContent>
-          </Card>
-        );
-      case "pipelineValue":
-        return (
-          <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer animate-fade-in" onClick={() => !isResizeMode && navigate('/deals')}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Pipeline Value</CardTitle>
-              <DollarSign className="w-4 h-4 text-green-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{formatCurrency(dealsData?.totalValue || 0)}</div>
-              <p className="text-xs text-muted-foreground">{dealsData?.active || 0} active deals</p>
-            </CardContent>
-          </Card>
-        );
-      case "conversionRate":
-        const totalDeals = (dealsData?.won || 0) + (dealsData?.lost || 0);
-        const convRate = totalDeals > 0 ? Math.round((dealsData?.won || 0) / totalDeals * 100) : 0;
-        return (
-          <Card className="h-full animate-fade-in">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Conversion Rate</CardTitle>
-              <Percent className="w-4 h-4 text-blue-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{convRate}%</div>
-              <p className="text-xs text-muted-foreground">{dealsData?.won || 0} won / {totalDeals} closed</p>
-            </CardContent>
-          </Card>
-        );
-      case "completedTasks":
-        return (
-          <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer animate-fade-in" onClick={() => !isResizeMode && navigate('/tasks')}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Completed Tasks</CardTitle>
-              <CheckCircle className="w-4 h-4 text-green-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{completedTasksCount || 0}</div>
-              <p className="text-xs text-muted-foreground">Tasks completed</p>
-            </CardContent>
-          </Card>
-        );
-      case "overdueItems":
-        return (
-          <Card className="h-full hover:shadow-lg transition-shadow cursor-pointer animate-fade-in" onClick={() => !isResizeMode && navigate('/tasks')}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Overdue Items</CardTitle>
-              <AlertTriangle className="w-4 h-4 text-red-600" />
-            </CardHeader>
-            <CardContent>
-              <div className={`text-2xl font-bold ${(overdueItemsCount || 0) > 0 ? 'text-red-600' : ''}`}>{overdueItemsCount || 0}</div>
-              <p className="text-xs text-muted-foreground">{(overdueItemsCount || 0) > 0 ? 'Needs attention' : 'All caught up!'}</p>
-            </CardContent>
-          </Card>
-        );
-      case "emailStats":
-        return (
-          <Card className="h-full animate-fade-in">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Email Statistics</CardTitle>
-              <Mail className="w-4 h-4 text-blue-600" />
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div>
-                  <p className="text-xl font-bold">{emailStats?.sent || 0}</p>
-                  <p className="text-xs text-muted-foreground">Sent</p>
-                </div>
-                <div>
-                  <p className="text-xl font-bold text-green-600">{emailStats?.opened || 0}</p>
-                  <p className="text-xs text-muted-foreground">Opened</p>
-                </div>
-                <div>
-                  <p className="text-xl font-bold text-blue-600">{emailStats?.clicked || 0}</p>
-                  <p className="text-xs text-muted-foreground">Clicked</p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        );
-      case "topDeals":
-        return (
-          <Card className="h-full animate-fade-in">
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="flex items-center gap-2">
-                <Trophy className="w-5 h-5 text-amber-500" />
-                Top Deals
-              </CardTitle>
-              <Button variant="ghost" size="sm" onClick={() => !isResizeMode && navigate('/deals')}>
-                View All
-              </Button>
-            </CardHeader>
-            <CardContent>
-              {topDeals && topDeals.length > 0 ? (
-                <div className="space-y-2">
-                  {topDeals.slice(0, 5).map((deal, idx) => (
-                    <div key={deal.id} className="flex items-center justify-between p-2 rounded-lg bg-muted/50">
-                      <div className="flex items-center gap-2 min-w-0 flex-1">
-                        <span className="text-xs font-bold text-muted-foreground">#{idx + 1}</span>
-                        <p className="text-sm font-medium truncate">{deal.deal_name}</p>
+            <CardContent className="px-3 pb-3 pt-0 flex-1 min-h-0 flex flex-col">
+              {totalAgendaItems > 0 ? (
+                <ScrollArea className="flex-1 min-h-0">
+                  <div className="space-y-1.5 pr-2">
+                    {(overdueTasks?.length || 0) > 0 && (
+                      <div>
+                        <p 
+                          className="text-[9px] font-medium text-red-600 mb-0.5 cursor-pointer hover:underline"
+                          onClick={() => !isResizeMode && navigate('/tasks?filter=overdue')}
+                        >
+                          ⚠️ Overdue ({overdueTasks?.length})
+                        </p>
+                        {overdueTasks?.slice(0, 3).map((task: any) => (
+                          <div 
+                            key={task.id} 
+                            className="text-[9px] p-1.5 rounded bg-red-50 dark:bg-red-900/20 text-red-700 dark:text-red-300 mb-1 flex items-center gap-1 group cursor-pointer hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+                            onClick={() => { if (!isResizeMode) { setSelectedTask(task); setTaskModalOpen(true); }}}
+                          >
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button 
+                                    className="w-3.5 h-3.5 rounded border border-red-300 dark:border-red-600 hover:bg-green-500 hover:border-green-500 flex items-center justify-center flex-shrink-0 transition-colors"
+                                    onClick={(e) => handleQuickCompleteTask(task.id, e)}
+                                  >
+                                    <Check className="w-2 h-2 opacity-0 group-hover:opacity-100 text-white" />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent>Mark complete</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                            <span className="truncate flex-1">{task.title}</span>
+                            <span className="text-[8px] text-red-500 flex-shrink-0">{format(new Date(task.due_date), 'MMM d')}</span>
+                          </div>
+                        ))}
                       </div>
-                      <span className="text-sm font-semibold text-green-600">{formatCurrency(deal.total_contract_value || 0)}</span>
-                    </div>
-                  ))}
-                </div>
+                    )}
+                    {(todaysMeetings?.length || 0) > 0 && (
+                      <div>
+                        <p 
+                          className="text-[9px] font-medium text-muted-foreground mb-0.5 cursor-pointer hover:underline"
+                          onClick={() => !isResizeMode && navigate('/meetings')}
+                        >
+                          <Calendar className="w-2.5 h-2.5 inline mr-0.5" />
+                          Meetings ({todaysMeetings?.length})
+                        </p>
+                        {todaysMeetings?.slice(0, 3).map((meeting: any) => (
+                          <div 
+                            key={meeting.id} 
+                            className="text-[9px] p-1.5 rounded bg-blue-50 dark:bg-blue-900/20 flex items-center gap-1 mb-1 cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+                            onClick={() => { if (!isResizeMode) { setSelectedMeeting(meeting); setMeetingModalOpen(true); }}}
+                          >
+                            <Calendar className="w-2.5 h-2.5 text-blue-600 flex-shrink-0" />
+                            <span className="truncate flex-1 min-w-0 text-blue-700 dark:text-blue-300">{meeting.subject}</span>
+                            <span className="text-blue-600 font-medium flex-shrink-0">{format(new Date(meeting.start_time), 'HH:mm')}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                    {(todaysTasks?.length || 0) > 0 && (
+                      <div>
+                        <p 
+                          className="text-[9px] font-medium text-muted-foreground mb-0.5 cursor-pointer hover:underline"
+                          onClick={() => !isResizeMode && navigate('/tasks?dueDate=today')}
+                        >
+                          <ListTodo className="w-2.5 h-2.5 inline mr-0.5" />
+                          Tasks Due ({todaysTasks?.length})
+                        </p>
+                        {todaysTasks?.slice(0, 3).map((task: any) => (
+                          <div 
+                            key={task.id} 
+                            className="text-[9px] p-1.5 rounded bg-orange-50 dark:bg-orange-900/20 flex items-center gap-1 mb-1 group cursor-pointer hover:bg-orange-100 dark:hover:bg-orange-900/30 transition-colors"
+                            onClick={() => { if (!isResizeMode) { setSelectedTask(task); setTaskModalOpen(true); }}}
+                          >
+                            <TooltipProvider>
+                              <Tooltip>
+                                <TooltipTrigger asChild>
+                                  <button 
+                                    className="w-3.5 h-3.5 rounded border border-orange-300 dark:border-orange-600 hover:bg-green-500 hover:border-green-500 flex items-center justify-center flex-shrink-0 transition-colors"
+                                    onClick={(e) => handleQuickCompleteTask(task.id, e)}
+                                  >
+                                    <Check className="w-2 h-2 opacity-0 group-hover:opacity-100 text-white" />
+                                  </button>
+                                </TooltipTrigger>
+                                <TooltipContent>Mark complete</TooltipContent>
+                              </Tooltip>
+                            </TooltipProvider>
+                            <span className="truncate flex-1 text-orange-700 dark:text-orange-300">{task.title}</span>
+                            {task.priority === 'high' && <span className="text-[8px] px-1 py-0.5 rounded bg-red-200 dark:bg-red-800 text-red-700 dark:text-red-200 flex-shrink-0">High</span>}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </ScrollArea>
               ) : (
-                <EmptyState
-                  title="No deals yet"
-                  description="Create your first deal to track opportunities"
-                  illustration="deals"
-                  actionLabel="View Deals"
-                  onAction={() => !isResizeMode && navigate('/deals')}
-                  variant="compact"
-                />
+                <div className="flex-1 min-h-0 flex flex-col items-center justify-center gap-2">
+                  <EmptyState
+                    title="Clear day ahead"
+                    description="No meetings or tasks scheduled for today"
+                    illustration="calendar"
+                    variant="compact"
+                  />
+                  <Button variant="outline" size="sm" className="text-[10px] h-6" onClick={() => { if (!isResizeMode) { setSelectedTask(null); setTaskModalOpen(true); }}}>
+                    <Plus className="w-3 h-3 mr-1" /> Add Task
+                  </Button>
+                </div>
               )}
             </CardContent>
           </Card>
         );
-      case "accountHealth":
+
+      case "upcomingMeetings":
         return (
-          <Card className="h-full animate-fade-in" onClick={() => !isResizeMode && navigate('/accounts')}>
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Account Health</CardTitle>
-              <Building2 className="w-4 h-4 text-blue-600" />
+          <Card className="h-full hover:shadow-lg transition-shadow animate-fade-in overflow-hidden flex flex-col">
+            <CardHeader className="flex flex-row items-center justify-between py-2 px-3 flex-shrink-0">
+              <CardTitle className="text-sm font-medium truncate">My Meetings</CardTitle>
+              <Button variant="outline" size="sm" className="h-6 text-xs gap-1 flex-shrink-0" onClick={() => !isResizeMode && setCreateMeetingModalOpen(true)}>
+                <Plus className="w-3 h-3" /> Add Meeting
+              </Button>
             </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div>
-                  <p className="text-xl font-bold">{accountsData?.total || 0}</p>
-                  <p className="text-xs text-muted-foreground">Total</p>
+            <CardContent className="px-3 pb-3 pt-0 flex-1 min-h-0 flex flex-col">
+              <div className="grid grid-cols-2 gap-1.5 flex-1 min-h-0">
+                <div 
+                  className="text-center p-1.5 bg-blue-50 dark:bg-blue-950/20 rounded cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-950/40 transition-colors flex flex-col items-center justify-center min-h-0"
+                  onClick={(e) => { e.stopPropagation(); navigate('/meetings?status=scheduled&owner=me'); }}
+                >
+                  <p className="text-base font-bold text-blue-600 leading-tight">{upcomingMeetings?.byStatus?.scheduled || 0}</p>
+                  <p className="text-[9px] text-muted-foreground leading-tight">Scheduled</p>
                 </div>
-                <div>
-                  <p className="text-xl font-bold text-green-600">{accountsData?.healthy || 0}</p>
-                  <p className="text-xs text-muted-foreground">Healthy</p>
+                <div 
+                  className="text-center p-1.5 bg-yellow-50 dark:bg-yellow-950/20 rounded cursor-pointer hover:bg-yellow-100 dark:hover:bg-yellow-950/40 transition-colors flex flex-col items-center justify-center min-h-0"
+                  onClick={(e) => { e.stopPropagation(); navigate('/meetings?status=ongoing&owner=me'); }}
+                >
+                  <p className="text-base font-bold text-yellow-600 leading-tight">{upcomingMeetings?.byStatus?.ongoing || 0}</p>
+                  <p className="text-[9px] text-muted-foreground leading-tight">Ongoing</p>
                 </div>
-                <div>
-                  <p className="text-xl font-bold text-red-600">{accountsData?.atRisk || 0}</p>
-                  <p className="text-xs text-muted-foreground">At Risk</p>
+                <div 
+                  className="text-center p-1.5 bg-green-50 dark:bg-green-950/20 rounded cursor-pointer hover:bg-green-100 dark:hover:bg-green-950/40 transition-colors flex flex-col items-center justify-center min-h-0"
+                  onClick={(e) => { e.stopPropagation(); navigate('/meetings?status=completed&owner=me'); }}
+                >
+                  <p className="text-base font-bold text-green-600 leading-tight">{upcomingMeetings?.byStatus?.completed || 0}</p>
+                  <p className="text-[9px] text-muted-foreground leading-tight">Completed</p>
+                </div>
+                <div 
+                  className="text-center p-1.5 bg-red-50 dark:bg-red-950/20 rounded cursor-pointer hover:bg-red-100 dark:hover:bg-red-950/40 transition-colors flex flex-col items-center justify-center min-h-0"
+                  onClick={(e) => { e.stopPropagation(); navigate('/meetings?status=cancelled&owner=me'); }}
+                >
+                  <p className="text-base font-bold text-red-600 leading-tight">{upcomingMeetings?.byStatus?.cancelled || 0}</p>
+                  <p className="text-[9px] text-muted-foreground leading-tight">Cancelled</p>
                 </div>
               </div>
             </CardContent>
           </Card>
         );
-      case "winLossRatio":
-        const winLossTotal = (dealsData?.won || 0) + (dealsData?.lost || 0);
-        const winRate = winLossTotal > 0 ? Math.round((dealsData?.won || 0) / winLossTotal * 100) : 0;
+
+      case "taskReminders":
         return (
-          <Card className="h-full animate-fade-in">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Win/Loss Ratio</CardTitle>
-              <PieChart className="w-4 h-4 text-purple-600" />
+          <Card className="h-full hover:shadow-lg transition-shadow animate-fade-in overflow-hidden flex flex-col">
+            <CardHeader className="flex flex-row items-center justify-between py-2 px-3 flex-shrink-0">
+              <CardTitle className="text-sm font-medium truncate">My Tasks</CardTitle>
+              <Button variant="outline" size="sm" className="h-6 text-xs gap-1 flex-shrink-0" onClick={() => { if (!isResizeMode) { setSelectedTask(null); setTaskModalOpen(true); }}}>
+                <Plus className="w-3 h-3" /> Add Task
+              </Button>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{dealsData?.won || 0}:{dealsData?.lost || 0}</div>
-              <p className="text-xs text-muted-foreground">{winRate}% win rate</p>
+            <CardContent className="px-3 pb-3 pt-0 flex-1 min-h-0 flex flex-col">
+              <div className="grid grid-cols-2 gap-1.5 flex-1 min-h-0">
+                <div 
+                  className="text-center p-1.5 bg-blue-50 dark:bg-blue-950/20 rounded cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-950/40 transition-colors flex flex-col items-center justify-center min-h-0"
+                  onClick={(e) => { e.stopPropagation(); navigate('/tasks?status=open&owner=me'); }}
+                >
+                  <p className="text-base font-bold text-blue-600 leading-tight">{taskReminders?.byStatus?.open || 0}</p>
+                  <p className="text-[9px] text-muted-foreground leading-tight">Open</p>
+                </div>
+                <div 
+                  className="text-center p-1.5 bg-yellow-50 dark:bg-yellow-950/20 rounded cursor-pointer hover:bg-yellow-100 dark:hover:bg-yellow-950/40 transition-colors flex flex-col items-center justify-center min-h-0"
+                  onClick={(e) => { e.stopPropagation(); navigate('/tasks?status=in_progress&owner=me'); }}
+                >
+                  <p className="text-base font-bold text-yellow-600 leading-tight">{taskReminders?.byStatus?.inProgress || 0}</p>
+                  <p className="text-[9px] text-muted-foreground leading-tight">In Progress</p>
+                </div>
+                <div 
+                  className="text-center p-1.5 bg-green-50 dark:bg-green-950/20 rounded cursor-pointer hover:bg-green-100 dark:hover:bg-green-950/40 transition-colors flex flex-col items-center justify-center min-h-0"
+                  onClick={(e) => { e.stopPropagation(); navigate('/tasks?status=completed&owner=me'); }}
+                >
+                  <p className="text-base font-bold text-green-600 leading-tight">{taskReminders?.byStatus?.completed || 0}</p>
+                  <p className="text-[9px] text-muted-foreground leading-tight">Completed</p>
+                </div>
+                <div 
+                  className="text-center p-1.5 bg-red-50 dark:bg-red-950/20 rounded cursor-pointer hover:bg-red-100 dark:hover:bg-red-950/40 transition-colors flex flex-col items-center justify-center min-h-0"
+                  onClick={(e) => { e.stopPropagation(); navigate('/tasks?status=cancelled&owner=me'); }}
+                >
+                  <p className="text-base font-bold text-red-600 leading-tight">{taskReminders?.byStatus?.cancelled || 0}</p>
+                  <p className="text-[9px] text-muted-foreground leading-tight">Cancelled</p>
+                </div>
+              </div>
             </CardContent>
           </Card>
         );
-      case "customerRetention":
+
+      case "recentActivities":
+        const getActivityIcon = (action: string, resourceType: string) => {
+          const iconClass = "w-3 h-3";
+          if (action === 'CREATE') return <Plus className={`${iconClass} text-green-600`} />;
+          if (action === 'DELETE') return <X className={`${iconClass} text-red-600`} />;
+          // UPDATE
+          switch (resourceType) {
+            case 'leads': return <Users className={`${iconClass} text-blue-600`} />;
+            case 'contacts': return <Users className={`${iconClass} text-green-600`} />;
+            case 'deals': return <Briefcase className={`${iconClass} text-purple-600`} />;
+            case 'accounts': return <Building2 className={`${iconClass} text-indigo-600`} />;
+            case 'meetings': return <Calendar className={`${iconClass} text-teal-600`} />;
+            case 'tasks': return <ListTodo className={`${iconClass} text-orange-600`} />;
+            default: return <Activity className={`${iconClass} text-primary`} />;
+          }
+        };
+        const getActivityBadge = (action: string) => {
+          if (action === 'CREATE') return { text: 'Created', class: 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-300' };
+          if (action === 'DELETE') return { text: 'Deleted', class: 'bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300' };
+          return { text: 'Updated', class: 'bg-blue-100 text-blue-700 dark:bg-blue-900/30 dark:text-blue-300' };
+        };
+        const getIconBgColor = (action: string, resourceType: string) => {
+          if (action === 'CREATE') return 'bg-green-100 dark:bg-green-900/30';
+          if (action === 'DELETE') return 'bg-red-100 dark:bg-red-900/30';
+          switch (resourceType) {
+            case 'leads': return 'bg-blue-100 dark:bg-blue-900/30';
+            case 'contacts': return 'bg-emerald-100 dark:bg-emerald-900/30';
+            case 'deals': return 'bg-purple-100 dark:bg-purple-900/30';
+            case 'accounts': return 'bg-indigo-100 dark:bg-indigo-900/30';
+            case 'meetings': return 'bg-teal-100 dark:bg-teal-900/30';
+            case 'tasks': return 'bg-orange-100 dark:bg-orange-900/30';
+            default: return 'bg-muted';
+          }
+        };
+        const formatRelativeTime = (dateStr: string) => {
+          const date = new Date(dateStr);
+          const now = new Date();
+          const diffMs = now.getTime() - date.getTime();
+          const diffMins = Math.floor(diffMs / 60000);
+          const diffHrs = Math.floor(diffMs / 3600000);
+          const diffDays = Math.floor(diffMs / 86400000);
+          
+          if (diffMins < 1) return 'Just now';
+          if (diffMins < 60) return `${diffMins}m ago`;
+          if (diffHrs < 24) return `${diffHrs}h ago`;
+          if (diffDays < 7) return `${diffDays}d ago`;
+          return format(date, 'MMM d');
+        };
+        const getActivityUserName = (activityUserId: string) => {
+          const profile = userProfiles?.find(p => p.id === activityUserId);
+          return profile?.full_name || 'Unknown User';
+        };
+        const navigateToEntity = (resourceType: string) => {
+          if (isResizeMode) return;
+          switch (resourceType) {
+            case 'leads': navigate('/leads'); break;
+            case 'contacts': navigate('/contacts'); break;
+            case 'deals': navigate('/deals'); break;
+            case 'accounts': navigate('/accounts'); break;
+            case 'meetings': navigate('/meetings'); break;
+            case 'tasks': navigate('/tasks'); break;
+          }
+        };
         return (
-          <Card className="h-full animate-fade-in">
-            <CardHeader className="flex flex-row items-center justify-between pb-2">
-              <CardTitle className="text-sm font-medium">Customer Retention</CardTitle>
-              <Star className="w-4 h-4 text-amber-500" />
+          <Card className="h-full animate-fade-in overflow-hidden flex flex-col">
+            <CardHeader className="flex flex-row items-center justify-between py-2 px-3 flex-shrink-0">
+              <CardTitle className="flex items-center gap-1.5 text-sm font-medium truncate">
+                <Activity className="w-4 h-4 text-primary flex-shrink-0" />
+                Recent Activities
+              </CardTitle>
+              <div className="flex items-center gap-2 flex-shrink-0">
+                {isAdmin && (
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[9px] text-muted-foreground whitespace-nowrap">
+                      {showAllActivities ? 'All' : 'My'}
+                    </span>
+                    <Switch
+                      checked={showAllActivities}
+                      onCheckedChange={setShowAllActivities}
+                      className="scale-75 data-[state=checked]:bg-primary"
+                    />
+                  </div>
+                )}
+                <Button variant="ghost" size="sm" className="h-6 text-xs flex-shrink-0" onClick={() => !isResizeMode && navigate('/settings?tab=audit')}>
+                  View All
+                </Button>
+              </div>
             </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{accountsData?.healthy || 0}</div>
-              <p className="text-xs text-muted-foreground">Healthy accounts</p>
+            <CardContent className="px-3 pb-3 pt-0 flex-1 min-h-0 flex flex-col">
+              {recentActivities && recentActivities.length > 0 ? (
+                <ScrollArea className="flex-1 min-h-0">
+                  <div className="space-y-2 pr-2">
+                    {recentActivities.slice(0, 8).map((activity) => {
+                      const badge = getActivityBadge(activity.activity_type);
+                      const isOwnActivity = activity.user_id === user?.id;
+                      return (
+                        <div 
+                          key={activity.id} 
+                          className="flex gap-3 p-2.5 rounded-lg bg-muted/40 hover:bg-muted hover:shadow-sm cursor-pointer transition-all"
+                          onClick={() => navigateToEntity(activity.resource_type)}
+                        >
+                          {/* Left: Icon */}
+                          <div className={`w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0 ${getIconBgColor(activity.activity_type, activity.resource_type)}`}>
+                            {getActivityIcon(activity.activity_type, activity.resource_type)}
+                          </div>
+                          
+                          {/* Right: Content */}
+                          <div className="flex-1 min-w-0">
+                            {/* Top row: Badge + Resource + Timestamp */}
+                            <div className="flex items-center justify-between gap-2 mb-0.5">
+                              <div className="flex items-center gap-1.5 min-w-0 flex-1">
+                                <span className="text-[10px] text-muted-foreground capitalize font-medium truncate">
+                                  {activity.resource_type}
+                                </span>
+                              </div>
+                              <span className={`text-[9px] px-1.5 py-0.5 rounded font-medium flex-shrink-0 ${badge.class}`}>
+                                {badge.text}
+                              </span>
+                              <TooltipProvider delayDuration={100}>
+                                <Tooltip>
+                                  <TooltipTrigger asChild>
+                                    <span className="text-[9px] text-muted-foreground whitespace-nowrap flex-shrink-0">
+                                      {formatRelativeTime(activity.activity_date)}
+                                    </span>
+                                  </TooltipTrigger>
+                                  <TooltipContent side="left" className="text-xs">
+                                    {format(new Date(activity.activity_date), 'MMM d, yyyy HH:mm')}
+                                  </TooltipContent>
+                                </Tooltip>
+                              </TooltipProvider>
+                            </div>
+                            
+                            {/* User name (All Activities mode only, for non-self activities) */}
+                            {showAllActivities && !isOwnActivity && (
+                              <p className="text-[9px] text-muted-foreground mb-0.5 flex items-center gap-1">
+                                <User className="w-2.5 h-2.5" />
+                                {getActivityUserName(activity.user_id)}
+                              </p>
+                            )}
+                            
+                            {/* Description */}
+                            <p className="text-[11px] font-medium line-clamp-2 leading-snug">
+                              {activity.subject}
+                            </p>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
+              ) : (
+                <div className="flex-1 min-h-0 flex items-center justify-center">
+                  <EmptyState
+                    title={showAllActivities ? "No team activities" : "No recent activities"}
+                    description={showAllActivities ? "Team activities will appear here" : "Activities will appear as you work"}
+                    illustration="activities"
+                    variant="compact"
+                  />
+                </div>
+              )}
             </CardContent>
           </Card>
         );
-      
-      // Placeholder widgets
-      case "revenueChart":
-        return <PlaceholderWidget title="Revenue Chart" icon={<LineChart className="w-4 h-4 text-green-600" />} description="Revenue trends over time" />;
-      case "dealForecast":
-        return <PlaceholderWidget title="Deal Forecast" icon={<ArrowUpRight className="w-4 h-4 text-blue-600" />} description="Predicted deal outcomes" />;
-      case "callLog":
-        return <PlaceholderWidget title="Call Log" icon={<PhoneCall className="w-4 h-4 text-purple-600" />} description="Recent call activities" />;
-      case "teamActivity":
-        return <PlaceholderWidget title="Team Activity" icon={<MessageSquare className="w-4 h-4 text-blue-600" />} description="Team collaboration updates" />;
-      case "taskProgress":
-        return <PlaceholderWidget title="Task Progress" icon={<ListTodo className="w-4 h-4 text-amber-600" />} description="Task completion progress" />;
-      case "regionStats":
-        return <PlaceholderWidget title="Region Statistics" icon={<Globe className="w-4 h-4 text-teal-600" />} description="Performance by region" />;
-      case "geoDistribution":
-        return <PlaceholderWidget title="Geo Distribution" icon={<MapPin className="w-4 h-4 text-red-600" />} description="Geographic data distribution" />;
-      case "leadSources":
-        return <PlaceholderWidget title="Lead Sources" icon={<Filter className="w-4 h-4 text-indigo-600" />} description="Where leads come from" />;
-      case "salesVelocity":
-        return <PlaceholderWidget title="Sales Velocity" icon={<Gauge className="w-4 h-4 text-orange-600" />} description="Speed of sales cycle" />;
-      case "growthTrend":
-        return <PlaceholderWidget title="Growth Trend" icon={<TrendingUp className="w-4 h-4 text-green-600" />} description="Business growth over time" />;
+
+      case "emailStats":
+        return (
+          <Card className="h-full animate-fade-in overflow-hidden flex flex-col">
+            <CardHeader className="flex flex-row items-center justify-between py-2 px-3 flex-shrink-0">
+              <CardTitle className="text-sm font-medium truncate">Email Statistics</CardTitle>
+              <Mail className="w-4 h-4 text-blue-600 flex-shrink-0" />
+            </CardHeader>
+            <CardContent className="px-3 pb-3 pt-0 flex-1 min-h-0 flex flex-col justify-center gap-2">
+              <div className="grid grid-cols-3 gap-1.5 text-center">
+                <div className="flex flex-col items-center justify-center">
+                  <p className="text-base font-bold leading-tight">{emailStats?.sent || 0}</p>
+                  <p className="text-[9px] text-muted-foreground leading-tight">Sent</p>
+                </div>
+                <div className="flex flex-col items-center justify-center">
+                  <p className="text-base font-bold text-green-600 leading-tight">{emailStats?.opened || 0}</p>
+                  <p className="text-[9px] text-muted-foreground leading-tight">Opened</p>
+                </div>
+                <div className="flex flex-col items-center justify-center">
+                  <p className="text-base font-bold text-blue-600 leading-tight">{emailStats?.clicked || 0}</p>
+                  <p className="text-[9px] text-muted-foreground leading-tight">Clicked</p>
+                </div>
+              </div>
+              <div className="flex justify-between text-[9px] text-muted-foreground border-t pt-1.5">
+                <span>Open Rate: <span className="font-medium text-foreground">{emailStats?.openRate || 0}%</span></span>
+                <span>Click Rate: <span className="font-medium text-foreground">{emailStats?.clickRate || 0}%</span></span>
+              </div>
+            </CardContent>
+          </Card>
+        );
+
+      case "weeklySummary":
+        const summaryWeekStart = weeklySummary?.weekStart || startOfWeek(new Date(), { weekStartsOn: 1 });
+        const summaryWeekEnd = weeklySummary?.weekEnd || endOfWeek(new Date(), { weekStartsOn: 1 });
+        const currentData = weeklySummaryView === 'thisWeek' ? weeklySummary?.thisWeek : weeklySummary?.allTime;
+        const lastWeekData = weeklySummary?.lastWeek;
+        const allZeros = weeklySummaryView === 'thisWeek' && 
+          (currentData?.leads || 0) === 0 && 
+          (currentData?.contacts || 0) === 0 && 
+          (currentData?.accounts || 0) === 0 && 
+          (currentData?.deals || 0) === 0 && 
+          (currentData?.meetings || 0) === 0 && 
+          (currentData?.tasks || 0) === 0;
+
+        const getTrendIndicator = (current: number, previous: number) => {
+          if (weeklySummaryView !== 'thisWeek') return null;
+          const diff = current - previous;
+          if (diff > 0) return { icon: TrendingUp, color: 'text-green-500', diff: `+${diff}` };
+          if (diff < 0) return { icon: TrendingDown, color: 'text-red-500', diff: `${diff}` };
+          return { icon: Minus, color: 'text-muted-foreground', diff: '0' };
+        };
+
+        // Build navigation URLs with date filters for "this week" view
+        const buildNavUrl = (basePath: string) => {
+          if (weeklySummaryView === 'thisWeek') {
+            const fromStr = summaryWeekStart.toISOString();
+            const toStr = summaryWeekEnd.toISOString();
+            return `${basePath}?from=${encodeURIComponent(fromStr)}&to=${encodeURIComponent(toStr)}&status=all`;
+          }
+          return `${basePath}?status=all`;
+        };
+
+        const summaryItems = [
+          { key: 'leads', label: 'Leads', color: 'blue', value: currentData?.leads || 0, lastWeek: lastWeekData?.leads || 0, nav: buildNavUrl('/leads'), tooltip: weeklySummaryView === 'thisWeek' ? 'New leads created this week' : 'Total leads (all time)', action: () => setLeadModalOpen(true) },
+          { key: 'contacts', label: 'Contacts', color: 'green', value: currentData?.contacts || 0, lastWeek: lastWeekData?.contacts || 0, nav: buildNavUrl('/contacts'), tooltip: weeklySummaryView === 'thisWeek' ? 'New contacts added this week' : 'Total contacts (all time)', action: () => setContactModalOpen(true) },
+          { key: 'accounts', label: 'Accounts', color: 'cyan', value: currentData?.accounts || 0, lastWeek: lastWeekData?.accounts || 0, nav: buildNavUrl('/accounts'), tooltip: weeklySummaryView === 'thisWeek' ? 'New accounts created this week' : 'Total accounts (all time)', action: () => setAccountModalOpen(true) },
+          { key: 'deals', label: 'Deals', color: 'purple', value: currentData?.deals || 0, lastWeek: lastWeekData?.deals || 0, nav: buildNavUrl('/deals'), tooltip: weeklySummaryView === 'thisWeek' ? 'New deals created this week' : 'Total deals (all time)', action: () => navigate('/deals') },
+          { key: 'meetings', label: 'Meetings', color: 'indigo', value: currentData?.meetings || 0, lastWeek: lastWeekData?.meetings || 0, nav: buildNavUrl('/meetings'), tooltip: weeklySummaryView === 'thisWeek' ? 'Meetings completed this week' : 'Meetings completed (all time)', action: () => setCreateMeetingModalOpen(true) },
+          { key: 'tasks', label: 'Tasks', color: 'emerald', value: currentData?.tasks || 0, lastWeek: lastWeekData?.tasks || 0, nav: buildNavUrl('/tasks'), tooltip: weeklySummaryView === 'thisWeek' ? 'Tasks completed this week' : 'Tasks completed (all time)', action: () => { setSelectedTask(null); setTaskModalOpen(true); } },
+        ];
+
+        return (
+          <Card className="h-full animate-fade-in overflow-hidden flex flex-col">
+            <CardHeader className="flex flex-row items-center justify-between py-2 px-3 flex-shrink-0">
+              <CardTitle className="flex items-center gap-1.5 text-sm font-medium truncate">
+                {weeklySummaryView === 'thisWeek' ? 'Activity This Week' : 'Activity All Time'}
+              </CardTitle>
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                {weeklySummaryView === 'thisWeek' && (
+                  <span className="text-[8px] text-muted-foreground">{format(summaryWeekStart, 'MMM d')} - {format(summaryWeekEnd, 'MMM d')}</span>
+                )}
+                <div className="flex rounded-md overflow-hidden border border-border text-[8px]">
+                  <button
+                    className={`px-1.5 py-0.5 transition-colors ${weeklySummaryView === 'thisWeek' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                    onClick={() => setWeeklySummaryView('thisWeek')}
+                  >
+                    Week
+                  </button>
+                  <button
+                    className={`px-1.5 py-0.5 transition-colors ${weeklySummaryView === 'allTime' ? 'bg-primary text-primary-foreground' : 'hover:bg-muted'}`}
+                    onClick={() => setWeeklySummaryView('allTime')}
+                  >
+                    All
+                  </button>
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent className="px-3 pb-3 pt-0 flex-1 min-h-0 flex flex-col justify-center">
+              {allZeros ? (
+                <div className="flex flex-col items-center justify-center gap-2">
+                  <p className="text-[10px] text-muted-foreground text-center">No activity yet this week</p>
+                  <div className="flex flex-wrap justify-center gap-1">
+                    <Button variant="outline" size="sm" className="h-5 text-[9px] px-2 gap-0.5" onClick={() => !isResizeMode && setLeadModalOpen(true)}>
+                      <Plus className="w-2.5 h-2.5" /> Lead
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-5 text-[9px] px-2 gap-0.5" onClick={() => !isResizeMode && setContactModalOpen(true)}>
+                      <Plus className="w-2.5 h-2.5" /> Contact
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-5 text-[9px] px-2 gap-0.5" onClick={() => !isResizeMode && setAccountModalOpen(true)}>
+                      <Plus className="w-2.5 h-2.5" /> Account
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-5 text-[9px] px-2 gap-0.5" onClick={() => !isResizeMode && setCreateMeetingModalOpen(true)}>
+                      <Plus className="w-2.5 h-2.5" /> Meeting
+                    </Button>
+                    <Button variant="outline" size="sm" className="h-5 text-[9px] px-2 gap-0.5" onClick={() => { if (!isResizeMode) { setSelectedTask(null); setTaskModalOpen(true); }}}>
+                      <Plus className="w-2.5 h-2.5" /> Task
+                    </Button>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-6 gap-1 text-center">
+                  {summaryItems.map((item) => {
+                    const trend = getTrendIndicator(item.value, item.lastWeek);
+                    const TrendIcon = trend?.icon;
+                    return (
+                      <TooltipProvider key={item.key} delayDuration={100}>
+                        <Tooltip>
+                          <TooltipTrigger asChild>
+                            <div 
+                              className={`p-1.5 rounded bg-${item.color}-50 dark:bg-${item.color}-950/20 flex flex-col items-center justify-center cursor-pointer hover:bg-${item.color}-100 dark:hover:bg-${item.color}-950/40 transition-colors relative`}
+                              onClick={() => !isResizeMode && navigate(item.nav)}
+                            >
+                              <p className={`text-sm font-bold text-${item.color}-600 leading-tight`}>{item.value}</p>
+                              <p className="text-[8px] text-muted-foreground leading-tight">{item.label}</p>
+                              {TrendIcon && weeklySummaryView === 'thisWeek' && (
+                                <div className={`absolute -top-0.5 -right-0.5 flex items-center ${trend.color}`}>
+                                  <TrendIcon className="w-2.5 h-2.5" />
+                                </div>
+                              )}
+                            </div>
+                          </TooltipTrigger>
+                          <TooltipContent side="top" sideOffset={8} className="z-[100]">
+                            <p className="whitespace-nowrap">{item.tooltip}</p>
+                            {weeklySummaryView === 'thisWeek' && (
+                              <p className="text-[10px] text-muted-foreground">vs last week: {trend?.diff}</p>
+                            )}
+                          </TooltipContent>
+                        </Tooltip>
+                      </TooltipProvider>
+                    );
+                  })}
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+
+      case "followUpsDue":
+        const handleCompleteFollowUp = async (followUpId: string, e: React.MouseEvent) => {
+          e.stopPropagation();
+          try {
+            await supabase.from('meeting_follow_ups').update({ status: 'completed' }).eq('id', followUpId);
+            queryClient.invalidateQueries({ queryKey: ['user-follow-ups-due', user?.id] });
+            toast.success("Follow-up completed");
+          } catch (error) {
+            toast.error("Failed to complete follow-up");
+          }
+        };
+        return (
+          <Card className="h-full animate-fade-in overflow-hidden flex flex-col">
+            <CardHeader className="flex flex-row items-center justify-between py-2 px-3 flex-shrink-0">
+              <CardTitle className="text-sm font-medium truncate">Follow-Ups Due</CardTitle>
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                {(followUpsDue?.overdue || 0) > 0 && (
+                  <span className="text-[9px] px-1.5 py-0.5 rounded bg-red-100 text-red-700 dark:bg-red-900/30 dark:text-red-300">
+                    {followUpsDue?.overdue} overdue
+                  </span>
+                )}
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="ghost" size="sm" className="h-5 w-5 p-0" onClick={() => !isResizeMode && navigate('/meetings')}>
+                        <ClipboardList className="w-4 h-4 text-amber-600" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>View all meetings</TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+              </div>
+            </CardHeader>
+            <CardContent className="px-3 pb-3 pt-0 flex-1 min-h-0 flex flex-col">
+              {followUpsDue?.followUps && followUpsDue.followUps.length > 0 ? (
+                <ScrollArea className="flex-1 min-h-0">
+                  <div className="space-y-1.5 pr-2">
+                    {followUpsDue.followUps.map((followUp: any) => {
+                      const isOverdue = followUp.due_date && isBefore(new Date(followUp.due_date), new Date());
+                      return (
+                        <div 
+                          key={followUp.id} 
+                          className={`p-1.5 rounded text-[10px] flex items-start gap-1.5 group cursor-pointer transition-colors ${isOverdue ? 'bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30' : 'bg-muted/50 hover:bg-muted'}`}
+                          onClick={async () => {
+                            if (isResizeMode) return;
+                            // Fetch meeting details and open modal
+                            const { data: meeting } = await supabase.from('meetings').select('*').eq('id', followUp.meeting_id).single();
+                            if (meeting) {
+                              setSelectedMeeting(meeting);
+                              setMeetingModalOpen(true);
+                            }
+                          }}
+                        >
+                          <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <button 
+                                  className={`w-3.5 h-3.5 rounded border flex items-center justify-center flex-shrink-0 mt-0.5 transition-colors ${isOverdue ? 'border-red-300 dark:border-red-600 hover:bg-green-500 hover:border-green-500' : 'border-muted-foreground/30 hover:bg-green-500 hover:border-green-500'}`}
+                                  onClick={(e) => handleCompleteFollowUp(followUp.id, e)}
+                                >
+                                  <Check className="w-2 h-2 opacity-0 group-hover:opacity-100 text-white" />
+                                </button>
+                              </TooltipTrigger>
+                              <TooltipContent>Mark complete</TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider>
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium truncate">{followUp.title}</p>
+                            <div className="flex items-center gap-1 text-[9px] text-muted-foreground">
+                              <span className={isOverdue ? 'text-red-600 font-medium' : ''}>
+                                {isOverdue ? '⚠️ Overdue: ' : 'Due: '}
+                                {followUp.due_date ? format(new Date(followUp.due_date), 'MMM d') : 'No date'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </ScrollArea>
+              ) : (
+                <div className="flex-1 min-h-0 flex items-center justify-center text-muted-foreground text-[10px]">
+                  No pending follow-ups
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        );
+
       default:
         return null;
     }
   };
 
   return (
-    <div className="p-6 space-y-8" ref={containerRef}>
+    <div className="px-2 sm:px-4 py-4 space-y-4 w-full overflow-x-hidden" ref={containerRef}>
       {/* Welcome Header */}
       <div className="flex items-center justify-between flex-wrap gap-2">
         <div className="min-w-0 flex-1">
@@ -1406,7 +1698,6 @@ const UserDashboard = () => {
         <div className="flex gap-2 flex-shrink-0 items-center">
           {isResizeMode ? (
             <>
-              {/* Compact customize mode indicator */}
               <div className="bg-primary/10 border border-primary/20 rounded-lg px-3 py-1.5 hidden sm:flex items-center">
                 <p className="text-xs text-primary font-medium flex items-center gap-1.5">
                   <Settings2 className="w-3.5 h-3.5" />
@@ -1414,17 +1705,6 @@ const UserDashboard = () => {
                   <span className="md:hidden">Edit mode</span>
                 </p>
               </div>
-              <TooltipProvider>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button variant="ghost" size="sm" onClick={handleResetToDefault} className="gap-2">
-                      <RotateCcw className="w-4 h-4" />
-                      <span className="hidden sm:inline">Reset</span>
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent>Reset to default layout</TooltipContent>
-                </Tooltip>
-              </TooltipProvider>
               <Popover>
                 <PopoverTrigger asChild>
                   <Button variant="outline" className="gap-2">
@@ -1440,14 +1720,13 @@ const UserDashboard = () => {
                 <PopoverContent className="w-64 p-0" align="end">
                   <div className="p-3 border-b">
                     <p className="text-sm font-medium">Toggle Widgets</p>
-                    <p className="text-xs text-muted-foreground">Click to add/remove. Changes apply when you click Save.</p>
+                    <p className="text-xs text-muted-foreground">Click to add/remove.</p>
                   </div>
                   <ScrollArea className="h-64">
                     <div className="p-2 space-y-1">
                       {DEFAULT_WIDGETS.map(widget => {
                         const willBeVisible = willWidgetBeVisible(widget.key);
                         const isPending = pendingWidgetChanges.has(widget.key);
-                        
                         return (
                           <Button
                             key={widget.key}
@@ -1459,9 +1738,7 @@ const UserDashboard = () => {
                               {widget.icon}
                               {widget.label}
                             </span>
-                            {willBeVisible && (
-                              <Check className="w-4 h-4 text-primary" />
-                            )}
+                            {willBeVisible && <Check className="w-4 h-4 text-primary" />}
                           </Button>
                         );
                       })}
@@ -1470,18 +1747,15 @@ const UserDashboard = () => {
                 </PopoverContent>
               </Popover>
               <Button variant="outline" onClick={handleCancelCustomize} className="gap-2">
-                <X className="w-4 h-4" />
-                Cancel
+                <X className="w-4 h-4" /> Cancel
               </Button>
               <Button onClick={handleSaveLayout} className="gap-2" disabled={savePreferencesMutation.isPending}>
-                <Check className="w-4 h-4" />
-                {savePreferencesMutation.isPending ? 'Saving...' : 'Save'}
+                <Check className="w-4 h-4" /> {savePreferencesMutation.isPending ? 'Saving...' : 'Save'}
               </Button>
             </>
           ) : (
             <Button variant="outline" size="sm" onClick={handleEnterCustomizeMode} className="gap-2">
-              <Settings2 className="w-4 h-4" />
-              Customize
+              <Settings2 className="w-4 h-4" /> Customize
             </Button>
           )}
         </div>
@@ -1498,101 +1772,72 @@ const UserDashboard = () => {
         renderWidget={renderWidget}
         containerWidth={containerWidth}
       />
-
       
-      {/* Task Modal */}
+      {/* Modals */}
       <TaskModal
         open={taskModalOpen}
-        onOpenChange={(open) => {
-          setTaskModalOpen(open);
-          if (!open) setSelectedTask(null);
-        }}
+        onOpenChange={(open) => { setTaskModalOpen(open); if (!open) setSelectedTask(null); }}
         task={selectedTask}
         onSubmit={createTask}
         onUpdate={async (taskId, updates, original) => {
           const result = await updateTask(taskId, updates, original);
-          if (result) {
-            queryClient.invalidateQueries({ queryKey: ['user-task-reminders', user?.id] });
-          }
+          if (result) queryClient.invalidateQueries({ queryKey: ['user-task-reminders-enhanced', user?.id] });
           return result;
         }}
       />
       
-      {/* Meeting Modal (View/Edit) */}
       <MeetingModal
         open={meetingModalOpen}
-        onOpenChange={(open) => {
-          setMeetingModalOpen(open);
-          if (!open) setSelectedMeeting(null);
-        }}
+        onOpenChange={(open) => { setMeetingModalOpen(open); if (!open) setSelectedMeeting(null); }}
         meeting={selectedMeeting}
         onSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: ['user-upcoming-meetings', user?.id] });
+          queryClient.invalidateQueries({ queryKey: ['user-upcoming-meetings-enhanced', user?.id] });
           setMeetingModalOpen(false);
           setSelectedMeeting(null);
         }}
       />
       
-      {/* Create Meeting Modal (Quick Actions) */}
       <MeetingModal
         open={createMeetingModalOpen}
         onOpenChange={setCreateMeetingModalOpen}
         meeting={null}
         onSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: ['user-upcoming-meetings', user?.id] });
+          queryClient.invalidateQueries({ queryKey: ['user-upcoming-meetings-enhanced', user?.id] });
           setCreateMeetingModalOpen(false);
-          toast.success("Meeting scheduled successfully");
+          toast.success("Meeting scheduled");
         }}
       />
       
-      {/* Lead Modal (Quick Actions) */}
       <LeadModal
         open={leadModalOpen}
-        onOpenChange={(open) => {
-          setLeadModalOpen(open);
-          if (!open) {
-            queryClient.invalidateQueries({ queryKey: ['user-leads-summary', user?.id] });
-          }
-        }}
+        onOpenChange={(open) => { setLeadModalOpen(open); if (!open) queryClient.invalidateQueries({ queryKey: ['user-leads-enhanced', user?.id] }); }}
         lead={null}
         onSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: ['user-leads-summary', user?.id] });
+          queryClient.invalidateQueries({ queryKey: ['user-leads-enhanced', user?.id] });
           setLeadModalOpen(false);
-          toast.success("Lead created successfully");
+          toast.success("Lead created");
         }}
       />
       
-      {/* Contact Modal (Quick Actions) */}
       <ContactModal
         open={contactModalOpen}
-        onOpenChange={(open) => {
-          setContactModalOpen(open);
-          if (!open) {
-            queryClient.invalidateQueries({ queryKey: ['user-contacts-count', user?.id] });
-          }
-        }}
+        onOpenChange={(open) => { setContactModalOpen(open); if (!open) queryClient.invalidateQueries({ queryKey: ['user-contacts-enhanced', user?.id] }); }}
         contact={null}
         onSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: ['user-contacts-count', user?.id] });
+          queryClient.invalidateQueries({ queryKey: ['user-contacts-enhanced', user?.id] });
           setContactModalOpen(false);
-          toast.success("Contact created successfully");
+          toast.success("Contact created");
         }}
       />
       
-      {/* Account Modal (Quick Actions) */}
       <AccountModal
         open={accountModalOpen}
-        onOpenChange={(open) => {
-          setAccountModalOpen(open);
-          if (!open) {
-            queryClient.invalidateQueries({ queryKey: ['user-accounts-summary', user?.id] });
-          }
-        }}
+        onOpenChange={(open) => { setAccountModalOpen(open); if (!open) queryClient.invalidateQueries({ queryKey: ['user-accounts-enhanced', user?.id] }); }}
         account={null}
         onSuccess={() => {
-          queryClient.invalidateQueries({ queryKey: ['user-accounts-summary', user?.id] });
+          queryClient.invalidateQueries({ queryKey: ['user-accounts-enhanced', user?.id] });
           setAccountModalOpen(false);
-          toast.success("Account created successfully");
+          toast.success("Account created");
         }}
       />
     </div>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useCRUDAudit } from "@/hooks/useCRUDAudit";
@@ -90,8 +91,50 @@ export const ContactTable = ({
   const [itemsPerPage] = useState(50); // Default 50 contacts per page
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [sourceFilter, setSourceFilter] = useState<string>(() => {
+    const urlSource = searchParams.get('source');
+    return urlSource || "all";
+  });
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  
+  // Get owner parameter from URL - "me" means filter by current user
+  const ownerParam = searchParams.get('owner');
+  const [ownerFilter, setOwnerFilter] = useState<string>("all");
 
-  console.log('ContactTable: Rendering with contacts:', contacts.length);
+  // Fetch current user ID for "me" filtering
+  useEffect(() => {
+    const fetchCurrentUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setCurrentUserId(user.id);
+        // If owner=me in URL, set the owner filter to current user's ID
+        if (ownerParam === 'me') {
+          setOwnerFilter(user.id);
+        }
+      }
+    };
+    fetchCurrentUser();
+  }, [ownerParam]);
+
+  // Sync sourceFilter when URL changes
+  useEffect(() => {
+    const urlSource = searchParams.get('source');
+    if (urlSource) {
+      setSourceFilter(urlSource);
+    }
+  }, [searchParams]);
+
+  // Sync ownerFilter when ownerParam changes
+  useEffect(() => {
+    if (ownerParam === 'me' && currentUserId) {
+      setOwnerFilter(currentUserId);
+    } else if (!ownerParam) {
+      setOwnerFilter('all');
+    }
+  }, [ownerParam, currentUserId]);
+
+  console.log('ContactTable: Rendering with contacts count:', contacts.length);
 
   const fetchContacts = async () => {
     try {
@@ -158,6 +201,18 @@ export const ContactTable = ({
       contact.email?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
+    // Apply source filter
+    if (sourceFilter && sourceFilter !== "all") {
+      filtered = filtered.filter(contact => 
+        contact.contact_source?.toLowerCase() === sourceFilter.toLowerCase()
+      );
+    }
+
+    // Apply owner filter
+    if (ownerFilter && ownerFilter !== "all") {
+      filtered = filtered.filter(contact => contact.created_by === ownerFilter);
+    }
+
     // Apply sorting
     if (sortField) {
       filtered.sort((a, b) => {
@@ -180,7 +235,7 @@ export const ContactTable = ({
     setFilteredContacts(filtered);
     setCurrentPage(1);
     console.log('ContactTable: Filtered contacts:', filtered.length);
-  }, [contacts, searchTerm, sortField, sortDirection]);
+  }, [contacts, searchTerm, sortField, sortDirection, sourceFilter, ownerFilter]);
 
   const handleSort = (field: string) => {
     if (sortField === field) {
@@ -265,6 +320,10 @@ export const ContactTable = ({
         sortField={sortField}
         sortDirection={sortDirection}
         onSort={handleSort}
+        sourceFilter={sourceFilter}
+        setSourceFilter={setSourceFilter}
+        ownerFilter={ownerFilter}
+        setOwnerFilter={setOwnerFilter}
       />
 
       <Card>

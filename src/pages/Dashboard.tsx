@@ -22,18 +22,20 @@ const Dashboard = () => {
   const defaultYear = availableYears.includes(currentYear) ? currentYear : 2025;
   const [selectedYear, setSelectedYear] = useState(defaultYear);
 
-  // Fetch admin's dashboard preference
+  // Fetch admin's dashboard preference (uses dedicated dashboard_view column)
   const { data: dashboardPreference, isLoading: prefLoading } = useQuery({
     queryKey: ['dashboard-preference', user?.id],
     queryFn: async () => {
       if (!user?.id) return null;
       const { data, error } = await supabase
         .from('dashboard_preferences')
-        .select('layout_view')
+        .select('dashboard_view, layout_view')
         .eq('user_id', user.id)
         .maybeSingle();
       if (error) throw error;
-      return (data?.layout_view as DashboardView) || 'overview';
+      // Prefer new dashboard_view column, fallback to layout_view for legacy
+      const view = (data as any)?.dashboard_view || data?.layout_view;
+      return (view === 'analytics' ? 'analytics' : 'overview') as DashboardView;
     },
     enabled: !!user?.id && isAdmin,
   });
@@ -47,7 +49,7 @@ const Dashboard = () => {
     }
   }, [dashboardPreference]);
 
-  // Mutation to save dashboard preference
+  // Mutation to save dashboard preference (uses dedicated dashboard_view column)
   const savePreferenceMutation = useMutation({
     mutationFn: async (view: DashboardView) => {
       if (!user?.id) return;
@@ -55,9 +57,9 @@ const Dashboard = () => {
         .from('dashboard_preferences')
         .upsert({
           user_id: user.id,
-          layout_view: view,
+          dashboard_view: view,
           updated_at: new Date().toISOString(),
-        }, { onConflict: 'user_id' });
+        } as any, { onConflict: 'user_id' });
       if (error) throw error;
     },
     onSuccess: () => {

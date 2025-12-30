@@ -378,29 +378,35 @@ export type Database = {
         Row: {
           card_order: Json | null
           created_at: string | null
+          dashboard_view: string | null
           id: string
           layout_view: string | null
           updated_at: string | null
           user_id: string
           visible_widgets: Json | null
+          widget_layouts: Json | null
         }
         Insert: {
           card_order?: Json | null
           created_at?: string | null
+          dashboard_view?: string | null
           id?: string
           layout_view?: string | null
           updated_at?: string | null
           user_id: string
           visible_widgets?: Json | null
+          widget_layouts?: Json | null
         }
         Update: {
           card_order?: Json | null
           created_at?: string | null
+          dashboard_view?: string | null
           id?: string
           layout_view?: string | null
           updated_at?: string | null
           user_id?: string
           visible_widgets?: Json | null
+          widget_layouts?: Json | null
         }
         Relationships: []
       }
@@ -1361,6 +1367,33 @@ export type Database = {
           resource_type?: string
           user_agent?: string | null
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      table_column_preferences: {
+        Row: {
+          column_config: Json
+          created_at: string | null
+          id: string
+          module_name: string
+          updated_at: string | null
+          user_id: string
+        }
+        Insert: {
+          column_config: Json
+          created_at?: string | null
+          id?: string
+          module_name: string
+          updated_at?: string | null
+          user_id: string
+        }
+        Update: {
+          column_config?: Json
+          created_at?: string | null
+          id?: string
+          module_name?: string
+          updated_at?: string | null
+          user_id?: string
         }
         Relationships: []
       }

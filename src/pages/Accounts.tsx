@@ -3,12 +3,15 @@ import { Button } from "@/components/ui/button";
 import { Settings, Trash2, Upload, Download } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useState, useRef } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useToast } from "@/hooks/use-toast";
 import { useAccountsImportExport } from "@/hooks/useAccountsImportExport";
 import { AccountDeleteConfirmDialog } from "@/components/AccountDeleteConfirmDialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
 const Accounts = () => {
+  const [searchParams] = useSearchParams();
+  const initialStatus = searchParams.get('status') || 'all';
   const { toast } = useToast();
   const [showColumnCustomizer, setShowColumnCustomizer] = useState(false);
   const [showModal, setShowModal] = useState(false);
@@ -117,7 +120,8 @@ const Accounts = () => {
           setShowModal={setShowModal} 
           selectedAccounts={selectedAccounts} 
           setSelectedAccounts={setSelectedAccounts} 
-          key={refreshTrigger} 
+          key={`${refreshTrigger}-${initialStatus}`}
+          initialStatus={initialStatus}
           onBulkDeleteComplete={() => {
             setSelectedAccounts([]);
             setRefreshTrigger(prev => prev + 1);

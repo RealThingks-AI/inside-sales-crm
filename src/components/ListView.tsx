@@ -6,16 +6,20 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Deal, DealStage, DEAL_STAGES, STAGE_COLORS } from "@/types/deal";
 import { Search, Filter, X, ArrowUp, ArrowDown } from "lucide-react";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { RowActionsDropdown, Edit, Trash2, CheckSquare } from "./RowActionsDropdown";
 import { format } from "date-fns";
 import { InlineEditCell } from "./InlineEditCell";
-import { DealColumnCustomizer, DealColumnConfig } from "./DealColumnCustomizer";
+import { DealColumnCustomizer, DealColumnConfig, defaultDealColumns } from "./DealColumnCustomizer";
 import { BulkActionsBar } from "./BulkActionsBar";
 import { DealsAdvancedFilter, AdvancedFilterState } from "./DealsAdvancedFilter";
 import { TaskModal } from "./tasks/TaskModal";
 import { useTasks } from "@/hooks/useTasks";
 import { DealActionsDropdown } from "./DealActionsDropdown";
 import { useToast } from "@/hooks/use-toast";
+import { useQuery } from "@tanstack/react-query";
+import { supabase } from "@/integrations/supabase/client";
+import { useColumnPreferences } from "@/hooks/useColumnPreferences";
 
 interface ListViewProps {
   deals: Deal[];
@@ -23,6 +27,7 @@ interface ListViewProps {
   onUpdateDeal: (dealId: string, updates: Partial<Deal>) => void;
   onDeleteDeals: (dealIds: string[]) => void;
   onImportDeals: (deals: Partial<Deal>[]) => void;
+  initialStageFilter?: string;
 }
 
 export const ListView = ({ 
@@ -30,11 +35,13 @@ export const ListView = ({
   onDealClick, 
   onUpdateDeal, 
   onDeleteDeals, 
-  onImportDeals 
+  onImportDeals,
+  initialStageFilter = 'all'
 }: ListViewProps) => {
   const [searchTerm, setSearchTerm] = useState("");
-  const [filters, setFilters] = useState<AdvancedFilterState>({
-    stages: [],
+  const [leadOwnerFilter, setLeadOwnerFilter] = useState("all");
+  const [filters, setFilters] = useState<AdvancedFilterState>(() => ({
+    stages: initialStageFilter !== 'all' ? [initialStageFilter as DealStage] : [],
     regions: [],
     leadOwners: [],
     priorities: [],
@@ -42,12 +49,19 @@ export const ListView = ({
     handoffStatuses: [],
     searchTerm: "",
     probabilityRange: [0, 100],
-  });
+  }));
   const [sortBy, setSortBy] = useState<string>("modified_at");
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [selectedDeals, setSelectedDeals] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(50);
+
+  // Sync stage filter when initialStageFilter prop changes (from URL)
+  useEffect(() => {
+    if (initialStageFilter !== 'all') {
+      setFilters(prev => ({ ...prev, stages: [initialStageFilter as DealStage] }));
+    }
+  }, [initialStageFilter]);
   
   // Task Modal state
   const [taskModalOpen, setTaskModalOpen] = useState(false);
@@ -57,22 +71,31 @@ export const ListView = ({
   // Column customizer state
   const [columnCustomizerOpen, setColumnCustomizerOpen] = useState(false);
 
+  // Fetch all profiles for lead owner dropdown
+  const { data: allProfiles = [] } = useQuery({
+    queryKey: ['all-profiles'],
+    queryFn: async () => {
+      const { data } = await supabase.from('profiles').select('id, full_name');
+      return data || [];
+    },
+  });
+
   const [columns, setColumns] = useState<DealColumnConfig[]>([
     { field: 'project_name', label: 'Project', visible: true, order: 0 },
     { field: 'customer_name', label: 'Customer', visible: true, order: 1 },
     { field: 'lead_name', label: 'Lead Name', visible: true, order: 2 },
-    { field: 'lead_owner', label: 'Lead Owner', visible: true, order: 3 },
-    { field: 'stage', label: 'Stage', visible: true, order: 4 },
-    { field: 'priority', label: 'Priority', visible: true, order: 5 },
-    { field: 'total_contract_value', label: 'Value', visible: true, order: 6 },
-    { field: 'probability', label: 'Probability', visible: true, order: 7 },
-    { field: 'expected_closing_date', label: 'Expected Close', visible: true, order: 8 },
-    { field: 'region', label: 'Region', visible: false, order: 9 },
-    { field: 'project_duration', label: 'Duration', visible: false, order: 10 },
-    { field: 'start_date', label: 'Start Date', visible: false, order: 11 },
-    { field: 'end_date', label: 'End Date', visible: false, order: 12 },
-    { field: 'proposal_due_date', label: 'Proposal Due', visible: false, order: 13 },
-    { field: 'total_revenue', label: 'Total Revenue', visible: false, order: 14 },
+    { field: 'stage', label: 'Stage', visible: true, order: 3 },
+    { field: 'priority', label: 'Priority', visible: true, order: 4 },
+    { field: 'total_contract_value', label: 'Value', visible: true, order: 5 },
+    { field: 'probability', label: 'Probability', visible: true, order: 6 },
+    { field: 'expected_closing_date', label: 'Expected Close', visible: true, order: 7 },
+    { field: 'region', label: 'Region', visible: false, order: 8 },
+    { field: 'project_duration', label: 'Duration', visible: false, order: 9 },
+    { field: 'start_date', label: 'Start Date', visible: false, order: 10 },
+    { field: 'end_date', label: 'End Date', visible: false, order: 11 },
+    { field: 'proposal_due_date', label: 'Proposal Due', visible: false, order: 12 },
+    { field: 'total_revenue', label: 'Total Revenue', visible: false, order: 13 },
+    { field: 'lead_owner', label: 'Lead Owner', visible: true, order: 14 },
   ]);
 
   // Column width state
@@ -221,9 +244,10 @@ export const ListView = ({
     }
   };
 
-  const getFieldType = (field: string): 'text' | 'number' | 'date' | 'select' | 'textarea' | 'boolean' | 'stage' | 'priority' | 'currency' => {
+  const getFieldType = (field: string): 'text' | 'number' | 'date' | 'select' | 'textarea' | 'boolean' | 'stage' | 'priority' | 'currency' | 'userSelect' => {
     if (field === 'stage') return 'stage';
     if (field === 'priority') return 'priority';
+    if (field === 'lead_owner') return 'userSelect';
     if (['total_contract_value', 'total_revenue'].includes(field)) return 'currency';
     if (['expected_closing_date', 'start_date', 'end_date', 'proposal_due_date'].includes(field)) return 'date';
     if (['probability', 'project_duration'].includes(field)) return 'number';
@@ -284,6 +308,9 @@ export const ListView = ({
         deal.customer_name?.toLowerCase().includes(allSearchTerms) ||
         deal.region?.toLowerCase().includes(allSearchTerms);
       
+      // Apply lead owner filter (standalone dropdown)
+      const matchesLeadOwnerDropdown = leadOwnerFilter === "all" || deal.lead_owner === leadOwnerFilter;
+      
       // Apply multi-select filters
       const matchesStages = filters.stages.length === 0 || filters.stages.includes(deal.stage);
       const matchesRegions = filters.regions.length === 0 || filters.regions.includes(deal.region || '');
@@ -296,7 +323,7 @@ export const ListView = ({
       const dealProbability = deal.probability || 0;
       const matchesProbabilityRange = dealProbability >= filters.probabilityRange[0] && dealProbability <= filters.probabilityRange[1];
       
-      return matchesSearch && matchesStages && matchesRegions && matchesLeadOwners && 
+      return matchesSearch && matchesLeadOwnerDropdown && matchesStages && matchesRegions && matchesLeadOwners && 
              matchesPriorities && matchesProbabilities && matchesHandoffStatuses && matchesProbabilityRange;
     })
     .sort((a, b) => {
@@ -336,7 +363,7 @@ export const ListView = ({
   // Reset to first page when filters change
   useEffect(() => {
     setCurrentPage(1);
-  }, [filters, searchTerm]);
+  }, [filters, searchTerm, leadOwnerFilter]);
 
   const getActiveFiltersCount = () => {
     let count = 0;
@@ -391,6 +418,20 @@ export const ListView = ({
                 inputSize="control"
               />
             </div>
+            
+            <Select value={leadOwnerFilter} onValueChange={setLeadOwnerFilter}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue placeholder="All Lead Owners" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Lead Owners</SelectItem>
+                {availableOptions.leadOwners.map((owner) => (
+                  <SelectItem key={owner} value={owner}>
+                    {owner}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
             
             <DealsAdvancedFilter 
               filters={filters} 
@@ -518,6 +559,7 @@ export const ListView = ({
                         onSave={handleInlineEdit}
                         type={getFieldType(column.field)}
                         options={getFieldOptions(column.field)}
+                        userOptions={column.field === 'lead_owner' ? allProfiles : undefined}
                       />
                     </TableCell>
                   ))}

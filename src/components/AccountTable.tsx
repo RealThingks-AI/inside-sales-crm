@@ -1,8 +1,10 @@
 import { useState, useEffect, useMemo } from "react";
+import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { useCRUDAudit } from "@/hooks/useCRUDAudit";
 import { useUserDisplayNames } from "@/hooks/useUserDisplayNames";
+import { useColumnPreferences } from "@/hooks/useColumnPreferences";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
@@ -10,15 +12,17 @@ import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Search, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, X, Eye } from "lucide-react";
 import { RowActionsDropdown, Edit, Trash2, Mail } from "./RowActionsDropdown";
 import { AccountModal } from "./AccountModal";
-import { AccountColumnCustomizer, AccountColumnConfig } from "./AccountColumnCustomizer";
+import { AccountColumnCustomizer, AccountColumnConfig, defaultAccountColumns } from "./AccountColumnCustomizer";
 import { AccountStatusFilter } from "./AccountStatusFilter";
 import { AccountDeleteConfirmDialog } from "./AccountDeleteConfirmDialog";
 import { SendEmailModal, EmailRecipient } from "./SendEmailModal";
 import { AccountDetailModal } from "./accounts/AccountDetailModal";
 import { AccountScoreBadge, AccountSegmentBadge } from "./accounts/AccountScoreBadge";
+import { useQuery } from "@tanstack/react-query";
 export interface Account {
   id: string;
   company_name: string;
@@ -40,62 +44,6 @@ export interface Account {
   score?: number;
   segment?: string;
 }
-const defaultColumns: AccountColumnConfig[] = [{
-  field: 'company_name',
-  label: 'Company Name',
-  visible: true,
-  order: 0
-}, {
-  field: 'email',
-  label: 'Email',
-  visible: true,
-  order: 1
-}, {
-  field: 'company_type',
-  label: 'Company Type',
-  visible: true,
-  order: 2
-}, {
-  field: 'industry',
-  label: 'Industry',
-  visible: true,
-  order: 3
-}, {
-  field: 'tags',
-  label: 'Tags',
-  visible: true,
-  order: 4
-}, {
-  field: 'country',
-  label: 'Country',
-  visible: true,
-  order: 5
-}, {
-  field: 'status',
-  label: 'Status',
-  visible: true,
-  order: 6
-}, {
-  field: 'website',
-  label: 'Website',
-  visible: true,
-  order: 7
-}, {
-  field: 'account_owner',
-  label: 'Account Owner',
-  visible: true,
-  order: 8
-}, {
-  field: 'region',
-  label: 'Region',
-  visible: false,
-  order: 9
-}, {
-  field: 'phone',
-  label: 'Phone',
-  visible: false,
-  order: 10
-}];
 interface AccountTableProps {
   showColumnCustomizer: boolean;
   setShowColumnCustomizer: (show: boolean) => void;
@@ -104,6 +52,7 @@ interface AccountTableProps {
   selectedAccounts: string[];
   setSelectedAccounts: React.Dispatch<React.SetStateAction<string[]>>;
   onBulkDeleteComplete?: () => void;
+  initialStatus?: string;
 }
 const AccountTable = ({
   showColumnCustomizer,
@@ -112,7 +61,8 @@ const AccountTable = ({
   setShowModal,
   selectedAccounts,
   setSelectedAccounts,
-  onBulkDeleteComplete
+  onBulkDeleteComplete,
+  initialStatus = "all"
 }: AccountTableProps) => {
   const {
     toast
@@ -120,16 +70,62 @@ const AccountTable = ({
   const {
     logDelete
   } = useCRUDAudit();
+  const [searchParams] = useSearchParams();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [filteredAccounts, setFilteredAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
-  const [statusFilter, setStatusFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState(initialStatus);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  
+  // Column preferences hook
+  const { columns, saveColumns, isSaving } = useColumnPreferences({
+    moduleName: 'accounts',
+    defaultColumns: defaultAccountColumns,
+  });
+  const [localColumns, setLocalColumns] = useState<AccountColumnConfig[]>(columns);
+  
+  // Sync local columns when saved columns change
+  useEffect(() => {
+    setLocalColumns(columns);
+  }, [columns]);
+
+  // Get owner parameter from URL - "me" means filter by current user
+  const ownerParam = searchParams.get('owner');
+  const [ownerFilter, setOwnerFilter] = useState<string>("all");
   const [tagFilter, setTagFilter] = useState<string | null>(null);
+
+  // Fetch current user ID for "me" filtering
+  useEffect(() => {
+    const fetchCurrentUser = async () => {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (user) {
+        setCurrentUserId(user.id);
+        // If owner=me in URL, set the owner filter to current user's ID
+        if (ownerParam === 'me') {
+          setOwnerFilter(user.id);
+        }
+      }
+    };
+    fetchCurrentUser();
+  }, [ownerParam]);
+
+  // Sync statusFilter when initialStatus prop changes (from URL)
+  useEffect(() => {
+    setStatusFilter(initialStatus);
+  }, [initialStatus]);
+
+  // Sync ownerFilter when ownerParam changes
+  useEffect(() => {
+    if (ownerParam === 'me' && currentUserId) {
+      setOwnerFilter(currentUserId);
+    } else if (!ownerParam) {
+      setOwnerFilter('all');
+    }
+  }, [ownerParam, currentUserId]);
   const [editingAccount, setEditingAccount] = useState<Account | null>(null);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [accountToDelete, setAccountToDelete] = useState<Account | null>(null);
-  const [columns, setColumns] = useState(defaultColumns);
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage] = useState(50);
   const [sortField, setSortField] = useState<string | null>(null);
@@ -138,6 +134,15 @@ const AccountTable = ({
   const [emailRecipient, setEmailRecipient] = useState<EmailRecipient | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [viewingAccount, setViewingAccount] = useState<Account | null>(null);
+
+  // Fetch all profiles for owner dropdown
+  const { data: allProfiles = [] } = useQuery({
+    queryKey: ['all-profiles'],
+    queryFn: async () => {
+      const { data } = await supabase.from('profiles').select('id, full_name');
+      return data || [];
+    },
+  });
   useEffect(() => {
     fetchAccounts();
   }, []);
@@ -145,6 +150,9 @@ const AccountTable = ({
     let filtered = accounts.filter(account => account.company_name?.toLowerCase().includes(searchTerm.toLowerCase()) || account.industry?.toLowerCase().includes(searchTerm.toLowerCase()) || account.country?.toLowerCase().includes(searchTerm.toLowerCase()));
     if (statusFilter !== "all") {
       filtered = filtered.filter(account => account.status === statusFilter);
+    }
+    if (ownerFilter !== "all") {
+      filtered = filtered.filter(account => account.created_by === ownerFilter);
     }
     if (tagFilter) {
       filtered = filtered.filter(account => account.tags?.includes(tagFilter));
@@ -159,7 +167,7 @@ const AccountTable = ({
     }
     setFilteredAccounts(filtered);
     setCurrentPage(1);
-  }, [accounts, searchTerm, statusFilter, tagFilter, sortField, sortDirection]);
+  }, [accounts, searchTerm, statusFilter, ownerFilter, tagFilter, sortField, sortDirection]);
   const handleSort = (field: string) => {
     if (sortField === field) {
       setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
@@ -260,7 +268,7 @@ const AccountTable = ({
   const {
     displayNames
   } = useUserDisplayNames(createdByIds);
-  const visibleColumns = columns.filter(col => col.visible);
+  const visibleColumns = localColumns.filter(col => col.visible);
   const pageAccounts = getCurrentPageAccounts();
   const getStatusBadgeVariant = (status?: string) => {
     switch (status) {
@@ -287,6 +295,19 @@ const AccountTable = ({
             <Input placeholder="Search accounts..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9" inputSize="control" />
           </div>
           <AccountStatusFilter value={statusFilter} onValueChange={setStatusFilter} />
+          <Select value={ownerFilter} onValueChange={setOwnerFilter}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="All Owners" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Owners</SelectItem>
+              {allProfiles.map((profile) => (
+                <SelectItem key={profile.id} value={profile.id}>
+                  {profile.full_name || 'Unknown'}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
           {tagFilter && <div className="flex items-center gap-2">
               <Badge variant="secondary" className="flex items-center gap-1">
                 Tag: {tagFilter}
@@ -451,7 +472,7 @@ const AccountTable = ({
       setEditingAccount(null);
     }} />
 
-      <AccountColumnCustomizer open={showColumnCustomizer} onOpenChange={setShowColumnCustomizer} columns={columns} onColumnsChange={setColumns} />
+      <AccountColumnCustomizer open={showColumnCustomizer} onOpenChange={setShowColumnCustomizer} columns={localColumns} onColumnsChange={setLocalColumns} onSave={saveColumns} isSaving={isSaving} />
 
       <AccountDeleteConfirmDialog open={showDeleteDialog} onConfirm={handleDelete} onCancel={() => {
       setShowDeleteDialog(false);
