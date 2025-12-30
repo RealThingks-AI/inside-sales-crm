@@ -112,7 +112,7 @@ const Accounts = () => {
       <input ref={fileInputRef} type="file" accept=".csv" onChange={handleFileSelect} style={{ display: 'none' }} />
 
       {/* Main Content Area */}
-      <div className="flex-1 min-h-0 overflow-auto p-6">
+      <div className="flex-1 min-h-0 overflow-auto px-4 pt-2 pb-4">
         <AccountTable 
           showColumnCustomizer={showColumnCustomizer} 
           setShowColumnCustomizer={setShowColumnCustomizer} 

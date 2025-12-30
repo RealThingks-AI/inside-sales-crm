@@ -54,7 +54,7 @@ export const ListView = ({
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
   const [selectedDeals, setSelectedDeals] = useState<Set<string>>(new Set());
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(50);
+  const [itemsPerPage] = useState(25);
 
   // Sync stage filter when initialStageFilter prop changes (from URL)
   useEffect(() => {

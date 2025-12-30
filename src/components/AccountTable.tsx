@@ -127,7 +127,7 @@ const AccountTable = ({
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [accountToDelete, setAccountToDelete] = useState<Account | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(50);
+  const [itemsPerPage] = useState(25);
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [emailModalOpen, setEmailModalOpen] = useState(false);
@@ -286,7 +286,7 @@ const AccountTable = ({
         return 'secondary';
     }
   };
-  return <div className="space-y-6">
+  return <div className="space-y-3">
       {/* Header and Actions */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">

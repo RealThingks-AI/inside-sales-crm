@@ -175,7 +175,7 @@ const LeadTable = ({
     setLocalColumns(columns);
   }, [columns]);
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage, setItemsPerPage] = useState(50);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
   const [showConvertModal, setShowConvertModal] = useState(false);
   const [leadToConvert, setLeadToConvert] = useState<Lead | null>(null);
   const [sortField, setSortField] = useState<string | null>(null);
@@ -447,7 +447,7 @@ const LeadTable = ({
     setTaskModalOpen(true);
   };
 
-  return <div className="space-y-6">
+  return <div className="space-y-3">
       {/* Header and Actions */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-4">

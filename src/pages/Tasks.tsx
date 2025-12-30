@@ -146,7 +146,7 @@ const Tasks = () => {
       </div>
 
       {/* Main Content */}
-      <div className="flex-1 min-h-0 overflow-auto p-6">
+      <div className="flex-1 min-h-0 overflow-auto px-4 pt-2 pb-4">
         {viewMode === 'list' && <TaskListView tasks={tasks} onEdit={handleEdit} onDelete={handleDelete} onStatusChange={handleStatusChange} onToggleComplete={handleToggleComplete} initialStatusFilter={initialStatusFilter} initialOwnerFilter={initialOwnerFilter} />}
         {viewMode === 'kanban' && <TaskKanbanView tasks={tasks} onEdit={handleEdit} onDelete={handleDelete} onStatusChange={handleStatusChange} />}
         {viewMode === 'calendar' && <TaskCalendarView tasks={tasks} onEdit={handleEdit} />}

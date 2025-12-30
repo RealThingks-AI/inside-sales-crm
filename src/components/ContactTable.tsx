@@ -88,7 +88,7 @@ export const ContactTable = ({
   const [contactToDelete, setContactToDelete] = useState<string | null>(null);
   const [columns, setColumns] = useState(defaultColumns);
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(50); // Default 50 contacts per page
+  const [itemsPerPage] = useState(25); // Default 25 contacts per page
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [searchParams, setSearchParams] = useSearchParams();
@@ -310,7 +310,7 @@ export const ContactTable = ({
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-3">
       <ContactTableHeader 
         searchTerm={searchTerm}
         setSearchTerm={setSearchTerm}
