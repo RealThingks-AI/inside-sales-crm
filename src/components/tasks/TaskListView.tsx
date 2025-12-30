@@ -155,7 +155,7 @@ export const TaskListView = ({
   };
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       {/* Filters */}
       <div className="flex flex-wrap gap-4 items-center">
         <div className="relative w-64">
