@@ -26,7 +26,7 @@ import { ClearFiltersButton } from "./shared/ClearFiltersButton";
 import { TableSkeleton } from "./shared/Skeletons";
 import { TaskModal } from "./tasks/TaskModal";
 import { useTasks } from "@/hooks/useTasks";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 
 // Export ref interface for parent component
 export interface AccountTableRef {
@@ -81,10 +81,9 @@ const AccountTable = forwardRef<AccountTableRef, AccountTableProps>(({
   const {
     logDelete
   } = useCRUDAudit();
+  const queryClient = useQueryClient();
   const [searchParams, setSearchParams] = useSearchParams();
-  const [accounts, setAccounts] = useState<Account[]>([]);
   const [filteredAccounts, setFilteredAccounts] = useState<Account[]>([]);
-  const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState(initialStatus);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -162,29 +161,7 @@ const AccountTable = forwardRef<AccountTableRef, AccountTableProps>(({
     setTaskModalOpen(true);
   };
 
-  // Handle viewId from URL (from global search)
-  const viewId = searchParams.get('viewId');
-  useEffect(() => {
-    if (viewId && accounts.length > 0) {
-      const accountToView = accounts.find(a => a.id === viewId);
-      if (accountToView) {
-        setViewingAccount(accountToView);
-        setShowDetailModal(true);
-        // Clear the viewId from URL after opening
-        setSearchParams(prev => {
-          prev.delete('viewId');
-          return prev;
-        }, {
-          replace: true
-        });
-      }
-    }
-  }, [viewId, accounts, setSearchParams]);
-
-  // Expose handleBulkDelete to parent via ref
-  useImperativeHandle(ref, () => ({
-    handleBulkDelete
-  }), [selectedAccounts, accounts]);
+  // viewId effect is moved below the accounts query
 
   // Fetch all profiles for owner dropdown
   const {
@@ -196,55 +173,14 @@ const AccountTable = forwardRef<AccountTableRef, AccountTableProps>(({
         data
       } = await supabase.from('profiles').select('id, full_name');
       return data || [];
-    }
+    },
+    staleTime: 10 * 60 * 1000, // 10 minutes
   });
-  useEffect(() => {
-    fetchAccounts();
-  }, []);
-  useEffect(() => {
-    const searchLower = searchTerm.toLowerCase();
-    let filtered = accounts.filter(account => account.company_name?.toLowerCase().includes(searchLower) || account.industry?.toLowerCase().includes(searchLower) || account.country?.toLowerCase().includes(searchLower) || account.email?.toLowerCase().includes(searchLower) || account.phone?.toLowerCase().includes(searchLower) || account.website?.toLowerCase().includes(searchLower) || account.notes?.toLowerCase().includes(searchLower) || account.company_type?.toLowerCase().includes(searchLower) || account.region?.toLowerCase().includes(searchLower) || account.tags?.some(tag => tag.toLowerCase().includes(searchLower)));
-    if (statusFilter !== "all") {
-      filtered = filtered.filter(account => account.status === statusFilter);
-    }
 
-    // FIX: Use account_owner instead of created_by for owner filtering
-    if (ownerFilter !== "all") {
-      filtered = filtered.filter(account => account.account_owner === ownerFilter);
-    }
-    if (tagFilter) {
-      filtered = filtered.filter(account => account.tags?.includes(tagFilter));
-    }
-    if (sortField) {
-      filtered.sort((a, b) => {
-        const aValue = a[sortField as keyof Account] || '';
-        const bValue = b[sortField as keyof Account] || '';
-
-        // Handle numeric sorting for counts
-        if (typeof aValue === 'number' && typeof bValue === 'number') {
-          return sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
-        }
-        const comparison = aValue.toString().localeCompare(bValue.toString());
-        return sortDirection === 'asc' ? comparison : -comparison;
-      });
-    }
-    setFilteredAccounts(filtered);
-    setCurrentPage(1);
-  }, [accounts, searchTerm, statusFilter, ownerFilter, tagFilter, sortField, sortDirection]);
-  const handleSort = (field: string) => {
-    if (sortField === field) {
-      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortField(field);
-      setSortDirection('asc');
-    }
-  };
-  const getSortIcon = (field: string) => {
-    return null; // Hide sort icons but keep sorting on click
-  };
-  const fetchAccounts = async () => {
-    try {
-      setLoading(true);
+  // Fetch accounts with React Query caching
+  const { data: accounts = [], isLoading: loading, refetch: refetchAccounts } = useQuery({
+    queryKey: ['accounts'],
+    queryFn: async () => {
       const {
         data: accountsData,
         error
@@ -296,23 +232,85 @@ const AccountTable = forwardRef<AccountTableRef, AccountTableProps>(({
       }, {} as Record<string, number>);
 
       // Merge actual counts into accounts (DB triggers will keep these in sync)
-      const accountsWithCounts = (accountsData || []).map(account => ({
+      return (accountsData || []).map(account => ({
         ...account,
         contact_count: account.contact_count || contactCountMap[account.id] || 0,
         deal_count: account.deal_count || dealCountMap[account.id] || 0,
         lead_count: leadCountMap[account.id] || 0,
-      }));
+      })) as Account[];
+    },
+    staleTime: 2 * 60 * 1000, // 2 minutes
+  });
 
-      setAccounts(accountsWithCounts);
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to fetch accounts",
-        variant: "destructive"
-      });
-    } finally {
-      setLoading(false);
+  const fetchAccounts = () => {
+    refetchAccounts();
+  };
+
+  // Handle viewId from URL (from global search)
+  const viewId = searchParams.get('viewId');
+  useEffect(() => {
+    if (viewId && accounts.length > 0) {
+      const accountToView = accounts.find(a => a.id === viewId);
+      if (accountToView) {
+        setViewingAccount(accountToView);
+        setShowDetailModal(true);
+        // Clear the viewId from URL after opening
+        setSearchParams(prev => {
+          prev.delete('viewId');
+          return prev;
+        }, {
+          replace: true
+        });
+      }
     }
+  }, [viewId, accounts, setSearchParams]);
+
+  // Expose handleBulkDelete to parent via ref
+  useImperativeHandle(ref, () => ({
+    handleBulkDelete
+  }), [selectedAccounts, accounts]);
+
+  useEffect(() => {
+    const searchLower = searchTerm.toLowerCase();
+    let filtered = accounts.filter(account => account.company_name?.toLowerCase().includes(searchLower) || account.industry?.toLowerCase().includes(searchLower) || account.country?.toLowerCase().includes(searchLower) || account.email?.toLowerCase().includes(searchLower) || account.phone?.toLowerCase().includes(searchLower) || account.website?.toLowerCase().includes(searchLower) || account.notes?.toLowerCase().includes(searchLower) || account.company_type?.toLowerCase().includes(searchLower) || account.region?.toLowerCase().includes(searchLower) || account.tags?.some(tag => tag.toLowerCase().includes(searchLower)));
+    if (statusFilter !== "all") {
+      filtered = filtered.filter(account => account.status === statusFilter);
+    }
+
+    // FIX: Use account_owner instead of created_by for owner filtering
+    if (ownerFilter !== "all") {
+      filtered = filtered.filter(account => account.account_owner === ownerFilter);
+    }
+    if (tagFilter) {
+      filtered = filtered.filter(account => account.tags?.includes(tagFilter));
+    }
+    if (sortField) {
+      filtered.sort((a, b) => {
+        const aValue = a[sortField as keyof Account] || '';
+        const bValue = b[sortField as keyof Account] || '';
+
+        // Handle numeric sorting for counts
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
+        }
+        const comparison = aValue.toString().localeCompare(bValue.toString());
+        return sortDirection === 'asc' ? comparison : -comparison;
+      });
+    }
+    setFilteredAccounts(filtered);
+    setCurrentPage(1);
+  }, [accounts, searchTerm, statusFilter, ownerFilter, tagFilter, sortField, sortDirection]);
+  
+  const handleSort = (field: string) => {
+    if (sortField === field) {
+      setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortField(field);
+      setSortDirection('asc');
+    }
+  };
+  const getSortIcon = (field: string) => {
+    return null; // Hide sort icons but keep sorting on click
   };
   const handleDelete = async () => {
     if (!accountToDelete?.id) return;
