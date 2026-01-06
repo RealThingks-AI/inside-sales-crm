@@ -1,6 +1,6 @@
 import AccountTable from "@/components/AccountTable";
 import { Button } from "@/components/ui/button";
-import { Settings, Trash2, Upload, Download } from "lucide-react";
+import { Settings, Trash2, Upload, Download, Plus } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useState, useRef } from "react";
 import { useSearchParams } from "react-router-dom";
@@ -8,6 +8,11 @@ import { useToast } from "@/hooks/use-toast";
 import { useAccountsImportExport } from "@/hooks/useAccountsImportExport";
 import { AccountDeleteConfirmDialog } from "@/components/AccountDeleteConfirmDialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+
+// Export interface for AccountTable ref
+export interface AccountTableRef {
+  handleBulkDelete: () => Promise<void>;
+}
 
 const Accounts = () => {
   const [searchParams] = useSearchParams();
@@ -18,8 +23,11 @@ const Accounts = () => {
   const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
-  const [isDeleting, setIsDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  
+  // Ref to call bulk delete from AccountTable
+  const accountTableRef = useRef<AccountTableRef>(null);
+
   const {
     handleImport,
     handleExport,
@@ -49,6 +57,14 @@ const Accounts = () => {
     }
   };
 
+  // Execute bulk delete via AccountTable ref
+  const executeBulkDelete = async () => {
+    if (accountTableRef.current) {
+      await accountTableRef.current.handleBulkDelete();
+    }
+    setShowBulkDeleteDialog(false);
+  };
+
   return (
     <div className="h-screen flex flex-col bg-background overflow-hidden">
       {/* Fixed Header */}
@@ -56,21 +72,23 @@ const Accounts = () => {
         <div className="px-6 h-16 flex items-center border-b w-full">
           <div className="flex items-center justify-between w-full">
             <div className="min-w-0 flex-1">
-              <h1 className="text-2xl text-foreground font-semibold">Accounts</h1>
+              <h1 className="text-xl text-foreground font-semibold">Accounts</h1>
             </div>
             <div className="flex items-center gap-3">
               {selectedAccounts.length > 0 && (
                 <TooltipProvider>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button variant="outline" size="icon" onClick={handleBulkDeleteClick} disabled={isDeleting}>
-                        <Trash2 className="w-4 h-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>
-                      <p>{isDeleting ? 'Deleting...' : `Delete Selected (${selectedAccounts.length})`}</p>
-                    </TooltipContent>
-                  </Tooltip>
+                  <div className="flex items-center gap-1">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button variant="outline" size="icon" onClick={handleBulkDeleteClick}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Delete Selected ({selectedAccounts.length})</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
                 </TooltipProvider>
               )}
 
@@ -93,14 +111,19 @@ const Accounts = () => {
                     <Download className="w-4 h-4 mr-2" />
                     Export CSV
                   </DropdownMenuItem>
-                  <DropdownMenuItem onClick={handleBulkDeleteClick} disabled={selectedAccounts.length === 0 || isDeleting} className="text-destructive focus:text-destructive">
+                  <DropdownMenuItem 
+                    onClick={handleBulkDeleteClick} 
+                    disabled={selectedAccounts.length === 0} 
+                    className="text-destructive focus:text-destructive"
+                  >
                     <Trash2 className="w-4 h-4 mr-2" />
-                    {isDeleting ? 'Deleting...' : `Delete Selected (${selectedAccounts.length})`}
+                    Delete Selected ({selectedAccounts.length})
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
 
-              <Button variant="outline" size="sm" onClick={() => setShowModal(true)}>
+              <Button size="sm" onClick={() => setShowModal(true)} className="gap-1.5">
+                <Plus className="w-4 h-4" />
                 Add Account
               </Button>
             </div>
@@ -109,11 +132,12 @@ const Accounts = () => {
       </div>
 
       {/* Hidden file input */}
-      <input ref={fileInputRef} type="file" accept=".csv" onChange={handleFileSelect} style={{ display: 'none' }} />
+      <input ref={fileInputRef} type="file" accept=".csv" onChange={handleFileSelect} className="hidden" />
 
       {/* Main Content Area */}
-      <div className="flex-1 min-h-0 overflow-auto px-4 pt-2 pb-4">
+      <div className="flex-1 min-h-0 flex flex-col px-4 pt-2 pb-4">
         <AccountTable 
+          ref={accountTableRef}
           showColumnCustomizer={showColumnCustomizer} 
           setShowColumnCustomizer={setShowColumnCustomizer} 
           showModal={showModal} 
@@ -133,15 +157,12 @@ const Accounts = () => {
       {/* Bulk Delete Confirmation Dialog */}
       <AccountDeleteConfirmDialog 
         open={showBulkDeleteDialog} 
-        onConfirm={async () => {
-          setIsDeleting(true);
-          setShowBulkDeleteDialog(false);
-          setIsDeleting(false);
-        }} 
+        onConfirm={executeBulkDelete} 
         onCancel={() => setShowBulkDeleteDialog(false)} 
         isMultiple={true} 
         count={selectedAccounts.length} 
       />
+
     </div>
   );
 };

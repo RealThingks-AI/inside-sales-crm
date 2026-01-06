@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, forwardRef, useImperativeHandle } from "react";
 import { useSearchParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
@@ -13,16 +13,25 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Search, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, X, Eye } from "lucide-react";
-import { RowActionsDropdown, Edit, Trash2, Mail } from "./RowActionsDropdown";
+import { Search, ArrowUpDown, ArrowUp, ArrowDown, ChevronLeft, ChevronRight, X, Eye, Building2, Pencil, CheckSquare } from "lucide-react";
+import { RowActionsDropdown, Edit, Trash2 } from "./RowActionsDropdown";
 import { AccountModal } from "./AccountModal";
 import { AccountColumnCustomizer, AccountColumnConfig, defaultAccountColumns } from "./AccountColumnCustomizer";
 import { AccountStatusFilter } from "./AccountStatusFilter";
 import { AccountDeleteConfirmDialog } from "./AccountDeleteConfirmDialog";
-import { SendEmailModal, EmailRecipient } from "./SendEmailModal";
 import { AccountDetailModal } from "./accounts/AccountDetailModal";
-import { AccountScoreBadge, AccountSegmentBadge } from "./accounts/AccountScoreBadge";
+import { HighlightedText } from "./shared/HighlightedText";
+import { getAccountStatusColor } from "@/utils/accountStatusUtils";
+import { ClearFiltersButton } from "./shared/ClearFiltersButton";
+import { TableSkeleton } from "./shared/Skeletons";
+import { TaskModal } from "./tasks/TaskModal";
+import { useTasks } from "@/hooks/useTasks";
 import { useQuery } from "@tanstack/react-query";
+
+// Export ref interface for parent component
+export interface AccountTableRef {
+  handleBulkDelete: () => Promise<void>;
+}
 export interface Account {
   id: string;
   company_name: string;
@@ -41,8 +50,9 @@ export interface Account {
   updated_at?: string;
   created_by?: string;
   modified_by?: string;
-  score?: number;
-  segment?: string;
+  deal_count?: number;
+  contact_count?: number;
+  lead_count?: number;
 }
 interface AccountTableProps {
   showColumnCustomizer: boolean;
@@ -54,7 +64,8 @@ interface AccountTableProps {
   onBulkDeleteComplete?: () => void;
   initialStatus?: string;
 }
-const AccountTable = ({
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+const AccountTable = forwardRef<AccountTableRef, AccountTableProps>(({
   showColumnCustomizer,
   setShowColumnCustomizer,
   showModal,
@@ -63,28 +74,32 @@ const AccountTable = ({
   setSelectedAccounts,
   onBulkDeleteComplete,
   initialStatus = "all"
-}: AccountTableProps) => {
+}, ref) => {
   const {
     toast
   } = useToast();
   const {
     logDelete
   } = useCRUDAudit();
-  const [searchParams] = useSearchParams();
+  const [searchParams, setSearchParams] = useSearchParams();
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [filteredAccounts, setFilteredAccounts] = useState<Account[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState("");
   const [statusFilter, setStatusFilter] = useState(initialStatus);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  
+
   // Column preferences hook
-  const { columns, saveColumns, isSaving } = useColumnPreferences({
+  const {
+    columns,
+    saveColumns,
+    isSaving
+  } = useColumnPreferences({
     moduleName: 'accounts',
-    defaultColumns: defaultAccountColumns,
+    defaultColumns: defaultAccountColumns
   });
   const [localColumns, setLocalColumns] = useState<AccountColumnConfig[]>(columns);
-  
+
   // Sync local columns when saved columns change
   useEffect(() => {
     setLocalColumns(columns);
@@ -98,7 +113,11 @@ const AccountTable = ({
   // Fetch current user ID for "me" filtering
   useEffect(() => {
     const fetchCurrentUser = async () => {
-      const { data: { user } } = await supabase.auth.getUser();
+      const {
+        data: {
+          user
+        }
+      } = await supabase.auth.getUser();
       if (user) {
         setCurrentUserId(user.id);
         // If owner=me in URL, set the owner filter to current user's ID
@@ -127,32 +146,71 @@ const AccountTable = ({
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [accountToDelete, setAccountToDelete] = useState<Account | null>(null);
   const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(25);
+  const [itemsPerPage, setItemsPerPage] = useState(25);
   const [sortField, setSortField] = useState<string | null>(null);
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-  const [emailModalOpen, setEmailModalOpen] = useState(false);
-  const [emailRecipient, setEmailRecipient] = useState<EmailRecipient | null>(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [viewingAccount, setViewingAccount] = useState<Account | null>(null);
+  const [isBulkDeleting, setIsBulkDeleting] = useState(false);
+  const [taskModalOpen, setTaskModalOpen] = useState(false);
+  const [taskAccountId, setTaskAccountId] = useState<string | null>(null);
+
+  const { createTask } = useTasks();
+
+  const handleCreateTask = (account: Account) => {
+    setTaskAccountId(account.id);
+    setTaskModalOpen(true);
+  };
+
+  // Handle viewId from URL (from global search)
+  const viewId = searchParams.get('viewId');
+  useEffect(() => {
+    if (viewId && accounts.length > 0) {
+      const accountToView = accounts.find(a => a.id === viewId);
+      if (accountToView) {
+        setViewingAccount(accountToView);
+        setShowDetailModal(true);
+        // Clear the viewId from URL after opening
+        setSearchParams(prev => {
+          prev.delete('viewId');
+          return prev;
+        }, {
+          replace: true
+        });
+      }
+    }
+  }, [viewId, accounts, setSearchParams]);
+
+  // Expose handleBulkDelete to parent via ref
+  useImperativeHandle(ref, () => ({
+    handleBulkDelete
+  }), [selectedAccounts, accounts]);
 
   // Fetch all profiles for owner dropdown
-  const { data: allProfiles = [] } = useQuery({
+  const {
+    data: allProfiles = []
+  } = useQuery({
     queryKey: ['all-profiles'],
     queryFn: async () => {
-      const { data } = await supabase.from('profiles').select('id, full_name');
+      const {
+        data
+      } = await supabase.from('profiles').select('id, full_name');
       return data || [];
-    },
+    }
   });
   useEffect(() => {
     fetchAccounts();
   }, []);
   useEffect(() => {
-    let filtered = accounts.filter(account => account.company_name?.toLowerCase().includes(searchTerm.toLowerCase()) || account.industry?.toLowerCase().includes(searchTerm.toLowerCase()) || account.country?.toLowerCase().includes(searchTerm.toLowerCase()));
+    const searchLower = searchTerm.toLowerCase();
+    let filtered = accounts.filter(account => account.company_name?.toLowerCase().includes(searchLower) || account.industry?.toLowerCase().includes(searchLower) || account.country?.toLowerCase().includes(searchLower) || account.email?.toLowerCase().includes(searchLower) || account.phone?.toLowerCase().includes(searchLower) || account.website?.toLowerCase().includes(searchLower) || account.notes?.toLowerCase().includes(searchLower) || account.company_type?.toLowerCase().includes(searchLower) || account.region?.toLowerCase().includes(searchLower) || account.tags?.some(tag => tag.toLowerCase().includes(searchLower)));
     if (statusFilter !== "all") {
       filtered = filtered.filter(account => account.status === statusFilter);
     }
+
+    // FIX: Use account_owner instead of created_by for owner filtering
     if (ownerFilter !== "all") {
-      filtered = filtered.filter(account => account.created_by === ownerFilter);
+      filtered = filtered.filter(account => account.account_owner === ownerFilter);
     }
     if (tagFilter) {
       filtered = filtered.filter(account => account.tags?.includes(tagFilter));
@@ -161,6 +219,11 @@ const AccountTable = ({
       filtered.sort((a, b) => {
         const aValue = a[sortField as keyof Account] || '';
         const bValue = b[sortField as keyof Account] || '';
+
+        // Handle numeric sorting for counts
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return sortDirection === 'asc' ? aValue - bValue : bValue - aValue;
+        }
         const comparison = aValue.toString().localeCompare(bValue.toString());
         return sortDirection === 'asc' ? comparison : -comparison;
       });
@@ -177,22 +240,70 @@ const AccountTable = ({
     }
   };
   const getSortIcon = (field: string) => {
-    if (sortField !== field) {
-      return <ArrowUpDown className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />;
-    }
-    return sortDirection === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />;
+    return null; // Hide sort icons but keep sorting on click
   };
   const fetchAccounts = async () => {
     try {
       setLoading(true);
       const {
-        data,
+        data: accountsData,
         error
       } = await supabase.from('accounts').select('*').order('created_at', {
         ascending: false
       });
       if (error) throw error;
-      setAccounts(data || []);
+
+      // Fetch actual contact counts per account
+      const { data: contactCounts } = await supabase
+        .from('contacts')
+        .select('account_id')
+        .not('account_id', 'is', null);
+
+      // Calculate contact counts
+      const contactCountMap = (contactCounts || []).reduce((acc, c) => {
+        if (c.account_id) {
+          acc[c.account_id] = (acc[c.account_id] || 0) + 1;
+        }
+        return acc;
+      }, {} as Record<string, number>);
+
+      // Fetch deal counts by account_id (now using proper FK)
+      const { data: dealCounts } = await supabase
+        .from('deals')
+        .select('account_id')
+        .not('account_id', 'is', null);
+
+      // Calculate deal counts
+      const dealCountMap = (dealCounts || []).reduce((acc, d) => {
+        if (d.account_id) {
+          acc[d.account_id] = (acc[d.account_id] || 0) + 1;
+        }
+        return acc;
+      }, {} as Record<string, number>);
+
+      // Fetch lead counts by account_id
+      const { data: leadCounts } = await supabase
+        .from('leads')
+        .select('account_id')
+        .not('account_id', 'is', null);
+
+      // Calculate lead counts
+      const leadCountMap = (leadCounts || []).reduce((acc, l) => {
+        if (l.account_id) {
+          acc[l.account_id] = (acc[l.account_id] || 0) + 1;
+        }
+        return acc;
+      }, {} as Record<string, number>);
+
+      // Merge actual counts into accounts (DB triggers will keep these in sync)
+      const accountsWithCounts = (accountsData || []).map(account => ({
+        ...account,
+        contact_count: account.contact_count || contactCountMap[account.id] || 0,
+        deal_count: account.deal_count || dealCountMap[account.id] || 0,
+        lead_count: leadCountMap[account.id] || 0,
+      }));
+
+      setAccounts(accountsWithCounts);
     } catch (error) {
       toast({
         title: "Error",
@@ -242,6 +353,60 @@ const AccountTable = ({
       });
     }
   };
+
+  // Bulk delete handler
+  const handleBulkDelete = async () => {
+    if (selectedAccounts.length === 0) return;
+    setIsBulkDeleting(true);
+    try {
+      // Check for linked entities for all selected accounts
+      const {
+        data: linkedContacts
+      } = await supabase.from('contacts').select('account_id').in('account_id', selectedAccounts);
+      const {
+        data: linkedLeads
+      } = await supabase.from('leads').select('account_id').in('account_id', selectedAccounts);
+      const accountsWithLinks = new Set([...(linkedContacts || []).map(c => c.account_id), ...(linkedLeads || []).map(l => l.account_id)]);
+      const deletableAccounts = selectedAccounts.filter(id => !accountsWithLinks.has(id));
+      const skippedCount = selectedAccounts.length - deletableAccounts.length;
+      if (deletableAccounts.length === 0) {
+        toast({
+          title: "Cannot Delete",
+          description: "All selected accounts have linked contacts or leads.",
+          variant: "destructive"
+        });
+        setIsBulkDeleting(false);
+        return;
+      }
+      const {
+        error
+      } = await supabase.from('accounts').delete().in('id', deletableAccounts);
+      if (error) throw error;
+
+      // Log deletions
+      for (const id of deletableAccounts) {
+        const account = accounts.find(a => a.id === id);
+        if (account) {
+          await logDelete('accounts', id, account);
+        }
+      }
+      toast({
+        title: "Success",
+        description: skippedCount > 0 ? `Deleted ${deletableAccounts.length} accounts. ${skippedCount} skipped (have linked records).` : `Deleted ${deletableAccounts.length} accounts successfully`
+      });
+      setSelectedAccounts([]);
+      fetchAccounts();
+      onBulkDeleteComplete?.();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: error.message || "Failed to delete accounts",
+        variant: "destructive"
+      });
+    } finally {
+      setIsBulkDeleting(false);
+    }
+  };
   const handleSelectAll = (checked: boolean) => {
     if (checked) {
       const pageAccounts = getCurrentPageAccounts().slice(0, 50);
@@ -262,34 +427,53 @@ const AccountTable = ({
     return filteredAccounts.slice(startIndex, startIndex + itemsPerPage);
   };
   const totalPages = Math.ceil(filteredAccounts.length / itemsPerPage);
-  const createdByIds = useMemo(() => {
-    return [...new Set(accounts.map(a => a.created_by).filter(Boolean))];
+
+  // Get owner IDs for display names - use account_owner instead of created_by
+  const ownerIds = useMemo(() => {
+    return [...new Set(accounts.map(a => a.account_owner).filter(Boolean))];
   }, [accounts]);
   const {
     displayNames
-  } = useUserDisplayNames(createdByIds);
+  } = useUserDisplayNames(ownerIds);
   const visibleColumns = localColumns.filter(col => col.visible);
   const pageAccounts = getCurrentPageAccounts();
-  const getStatusBadgeVariant = (status?: string) => {
-    switch (status) {
-      case 'Hot':
-        return 'destructive';
-      case 'Warm':
-        return 'default';
-      case 'Working':
-        return 'secondary';
-      case 'Closed-Won':
-        return 'outline';
-      case 'Closed-Lost':
-        return 'outline';
-      default:
-        return 'secondary';
-    }
+
+  // Check if any filters are active
+  const hasActiveFilters = searchTerm !== "" || statusFilter !== "all" || ownerFilter !== "all" || tagFilter !== null;
+  const clearAllFilters = () => {
+    setSearchTerm("");
+    setStatusFilter("all");
+    setOwnerFilter("all");
+    setTagFilter(null);
   };
-  return <div className="space-y-3">
+
+  // Generate initials from company name
+  const getCompanyInitials = (name: string) => {
+    return name.split(' ').slice(0, 2).map(word => word.charAt(0).toUpperCase()).join('');
+  };
+
+  // Generate consistent vibrant color from company name
+  const getAvatarColor = (name: string) => {
+    const colors = [
+      'bg-blue-600', 'bg-emerald-600', 'bg-purple-600', 'bg-amber-600', 
+      'bg-rose-600', 'bg-cyan-600', 'bg-indigo-600', 'bg-teal-600'
+    ];
+    const index = name.split('').reduce((acc, char) => acc + char.charCodeAt(0), 0) % colors.length;
+    return colors[index];
+  };
+  const formatCurrency = (value?: number): React.ReactNode => {
+    if (!value) return <span className="block text-center w-full">-</span>;
+    return new Intl.NumberFormat('en-US', {
+      style: 'currency',
+      currency: 'USD',
+      notation: 'compact',
+      maximumFractionDigits: 1
+    }).format(value);
+  };
+  return <div className="flex flex-col h-full space-y-3">
       {/* Header and Actions */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
+      <div className="flex items-center justify-between gap-4 flex-wrap">
+        <div className="flex items-center gap-3 flex-wrap">
           <div className="relative w-64">
             <Search className="absolute left-2.5 top-1/2 transform -translate-y-1/2 text-muted-foreground w-4 h-4 pointer-events-none" />
             <Input placeholder="Search accounts..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-9" inputSize="control" />
@@ -301,107 +485,171 @@ const AccountTable = ({
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">All Owners</SelectItem>
-              {allProfiles.map((profile) => (
-                <SelectItem key={profile.id} value={profile.id}>
+              {allProfiles.map(profile => <SelectItem key={profile.id} value={profile.id}>
                   {profile.full_name || 'Unknown'}
-                </SelectItem>
-              ))}
+                </SelectItem>)}
             </SelectContent>
           </Select>
-          {tagFilter && <div className="flex items-center gap-2">
-              <Badge variant="secondary" className="flex items-center gap-1">
-                Tag: {tagFilter}
-                <button onClick={() => setTagFilter(null)} className="ml-1 hover:text-destructive">
-                  <X className="w-3 h-3" />
-                </button>
-              </Badge>
-            </div>}
+          
+          {tagFilter && <Badge variant="secondary" className="flex items-center gap-1">
+              Tag: {tagFilter}
+              <button onClick={() => setTagFilter(null)} className="ml-1 hover:text-destructive">
+                <X className="w-3 h-3" />
+              </button>
+            </Badge>}
+          
+          <ClearFiltersButton hasActiveFilters={hasActiveFilters} onClear={clearAllFilters} />
+        </div>
+        
+        {/* Page size selector */}
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-muted-foreground">Show:</span>
+          <Select value={itemsPerPage.toString()} onValueChange={val => setItemsPerPage(Number(val))}>
+            <SelectTrigger className="w-[70px] h-8">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {PAGE_SIZE_OPTIONS.map(size => <SelectItem key={size} value={size.toString()}>{size}</SelectItem>)}
+            </SelectContent>
+          </Select>
         </div>
       </div>
 
       {/* Table */}
-      <Card>
-        <div className="overflow-auto">
+      <Card className="flex-1 min-h-0 flex flex-col">
+        <div className="relative overflow-auto flex-1 min-h-0">
           <Table>
-            <TableHeader className="sticky top-0 z-10">
-              <TableRow className="bg-muted/50 hover:bg-muted/60 border-b-2">
-                <TableHead className="w-12 text-center font-bold text-foreground bg-muted/50">
+            <TableHeader>
+              <TableRow className="sticky top-0 z-20 bg-muted border-b-2">
+                <TableHead className="w-12 text-center font-bold text-foreground">
                   <div className="flex justify-center">
                     <Checkbox checked={selectedAccounts.length > 0 && selectedAccounts.length === Math.min(pageAccounts.length, 50)} onCheckedChange={handleSelectAll} />
                   </div>
                 </TableHead>
-                {visibleColumns.map(column => <TableHead key={column.field} className="text-left font-bold text-foreground bg-muted/50 px-4 py-3 whitespace-nowrap">
-                    <div className="group flex items-center gap-2 cursor-pointer hover:text-primary" onClick={() => handleSort(column.field)}>
+                {visibleColumns.map(column => <TableHead key={column.field} className={`${column.field === 'company_name' || column.field === 'email' ? 'text-left' : 'text-center'} font-bold text-foreground px-4 py-3 whitespace-nowrap`}>
+                    <div onClick={() => handleSort(column.field)} className={`group gap-2 cursor-pointer hover:text-primary flex items-center ${column.field === 'company_name' || column.field === 'email' ? 'justify-start' : 'justify-center'}`}>
                       {column.label}
                       {getSortIcon(column.field)}
                     </div>
                   </TableHead>)}
-                <TableHead className="text-center font-bold text-foreground bg-muted/50 w-32 px-4 py-3">
+                <TableHead className="text-center font-bold text-foreground w-32 px-4 py-3">
                   Actions
                 </TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? <TableRow>
-                  <TableCell colSpan={visibleColumns.length + 2} className="text-center py-8">
-                    Loading accounts...
+                  <TableCell colSpan={visibleColumns.length + 2} className="p-0">
+                    <TableSkeleton columns={visibleColumns.length + 2} rows={10} />
                   </TableCell>
                 </TableRow> : pageAccounts.length === 0 ? <TableRow>
                   <TableCell colSpan={visibleColumns.length + 2} className="text-center py-8">
-                    No accounts found
-                  </TableCell>
-                </TableRow> : pageAccounts.map(account => <TableRow key={account.id} className="hover:bg-muted/20 border-b" data-state={selectedAccounts.includes(account.id) ? "selected" : undefined}>
-                  <TableCell className="text-center px-4 py-3">
-                    <div className="flex justify-center">
-                      <Checkbox checked={selectedAccounts.includes(account.id)} onCheckedChange={checked => handleSelectAccount(account.id, checked as boolean)} />
+                    <div className="flex flex-col items-center gap-2 text-muted-foreground">
+                      <Building2 className="w-10 h-10 opacity-50" />
+                      <p>No accounts found</p>
+                      {hasActiveFilters && <Button variant="link" size="sm" onClick={clearAllFilters}>
+                          Clear filters
+                        </Button>}
                     </div>
                   </TableCell>
-                  {visibleColumns.map(column => <TableCell key={column.field} className="text-left px-4 py-3 align-middle whitespace-nowrap overflow-hidden text-ellipsis max-w-[200px]">
-                      {column.field === 'company_name' ? <button onClick={() => {
-                  setEditingAccount(account);
-                  setShowModal(true);
-                }} className="text-primary hover:underline font-medium text-left truncate block w-full">
-                          {account.company_name || '-'}
-                        </button> : column.field === 'account_owner' ? <span className="truncate block">
-                          {account.created_by ? displayNames[account.created_by] || "Loading..." : '-'}
-                        </span> : column.field === 'status' && account.status ? <Badge variant={getStatusBadgeVariant(account.status)} className="whitespace-nowrap">
-                          {account.status}
-                        </Badge> : column.field === 'tags' && account.tags ? <TooltipProvider>
-                          <Tooltip>
-                            <TooltipTrigger asChild>
-                              <div className="flex items-center gap-1">
-                                <Badge variant="outline" className="text-xs truncate max-w-[100px] cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors" onClick={() => setTagFilter(account.tags![0])}>
-                                  {account.tags[0]}
-                                </Badge>
-                                {account.tags.length > 1 && <Badge variant="outline" className="text-xs shrink-0">
-                                    +{account.tags.length - 1}
-                                  </Badge>}
-                              </div>
-                            </TooltipTrigger>
-                            <TooltipContent side="bottom" className="z-50">
-                              <div className="flex flex-col gap-1">
-                                <span className="font-medium text-xs">All tags:</span>
-                                <div className="flex flex-wrap gap-1 max-w-[280px]">
-                                  {account.tags.map((tag, idx) => <Badge key={idx} variant="secondary" className="text-xs cursor-pointer" onClick={() => setTagFilter(tag)}>
-                                      {tag}
-                                    </Badge>)}
+                </TableRow> : pageAccounts.map(account => <TableRow key={account.id} className={`hover:bg-muted/30 border-b group transition-colors ${selectedAccounts.includes(account.id) ? 'bg-primary/5' : ''}`} data-state={selectedAccounts.includes(account.id) ? "selected" : undefined}>
+                    <TableCell className="text-center px-4 py-3">
+                      <div className="flex justify-center">
+                        <Checkbox checked={selectedAccounts.includes(account.id)} onCheckedChange={checked => handleSelectAccount(account.id, checked as boolean)} />
+                      </div>
+                    </TableCell>
+                    {visibleColumns.map(column => <TableCell key={column.field} className={`${column.field === 'company_name' || column.field === 'email' ? 'text-left' : 'text-center'} px-4 py-3 align-middle whitespace-nowrap overflow-hidden text-ellipsis max-w-[200px]`}>
+                        {column.field === 'company_name' ? <button onClick={() => {
+                    setViewingAccount(account);
+                    setShowDetailModal(true);
+                  }} className="text-primary hover:underline font-medium text-left truncate">
+                              <HighlightedText text={account.company_name} highlight={searchTerm} />
+                            </button> : column.field === 'account_owner' ? (
+                            account.account_owner ? (
+                              <span className="truncate block">{displayNames[account.account_owner] || "Loading..."}</span>
+                            ) : (
+                              <span className="text-center text-muted-foreground w-full block">-</span>
+                            )
+                          ) : column.field === 'status' ? (
+                            account.status ? (
+                              <Badge variant="outline" className={`whitespace-nowrap ${getAccountStatusColor(account.status)}`}>{account.status}</Badge>
+                            ) : (
+                              <span className="text-center text-muted-foreground w-full block">-</span>
+                            )
+                          ) : column.field === 'deal_count' ? (
+                            <span className="text-center w-full block">{account.deal_count ?? 0}</span>
+                          ) : column.field === 'contact_count' ? (
+                            <span className="text-center w-full block">{account.contact_count ?? 0}</span>
+                          ) : column.field === 'lead_count' ? (
+                            <span className="text-center w-full block">{account.lead_count ?? 0}</span>
+                          ) : column.field === 'tags' ? (account.tags && account.tags.length > 0 ? <TooltipProvider>
+                            <Tooltip>
+                              <TooltipTrigger asChild>
+                                <div className="flex items-center gap-1">
+                                  <Badge variant="outline" className="text-xs truncate max-w-[100px] cursor-pointer hover:bg-primary hover:text-primary-foreground transition-colors" onClick={() => setTagFilter(account.tags![0])}>
+                                    {account.tags[0]}
+                                  </Badge>
+                                  {account.tags.length > 1 && <Badge variant="outline" className="text-xs shrink-0">
+                                      +{account.tags.length - 1}
+                                    </Badge>}
                                 </div>
-                              </div>
-                            </TooltipContent>
-                          </Tooltip>
-                        </TooltipProvider> : column.field === 'website' && account.website ? <a href={account.website.startsWith('http') ? account.website : `https://${account.website}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-1">
-                          <span className="truncate max-w-[150px]">
-                            {account.website.replace(/^https?:\/\//, '')}
-                          </span>
-                          
-                        </a> : <span className="truncate block" title={account[column.field as keyof Account]?.toString() || '-'}>
-                          {account[column.field as keyof Account]?.toString() || '-'}
-                        </span>}
-                    </TableCell>)}
-                  <TableCell className="w-20 px-4 py-3">
-                    <div className="flex items-center justify-center">
-                      <RowActionsDropdown
-                        actions={[
+                              </TooltipTrigger>
+                              <TooltipContent side="bottom" className="z-50">
+                                <div className="flex flex-col gap-1">
+                                  <span className="font-medium text-xs">All tags:</span>
+                                  <div className="flex flex-wrap gap-1 max-w-[280px]">
+                                    {account.tags.map((tag, idx) => <Badge key={idx} variant="secondary" className="text-xs cursor-pointer" onClick={() => setTagFilter(tag)}>
+                                        {tag}
+                                      </Badge>)}
+                                  </div>
+                                </div>
+                              </TooltipContent>
+                            </Tooltip>
+                          </TooltipProvider> : <span className="text-center text-muted-foreground w-full block">-</span>) : column.field === 'website' ? (
+                            account.website ? (
+                              <a href={account.website.startsWith('http') ? account.website : `https://${account.website}`} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline flex items-center gap-1">
+                                <span className="truncate max-w-[150px]">{account.website.replace(/^https?:\/\//, '')}</span>
+                              </a>
+                            ) : (
+                              <span className="text-center text-muted-foreground w-full block">-</span>
+                            )
+                          ) : column.field === 'industry' ? (
+                            account.industry ? (
+                              <HighlightedText text={account.industry} highlight={searchTerm} />
+                            ) : (
+                              <span className="text-center text-muted-foreground w-full block">-</span>
+                            )
+                          ) : column.field === 'country' ? (
+                            account.country ? (
+                              <HighlightedText text={account.country} highlight={searchTerm} />
+                            ) : (
+                              <span className="text-center text-muted-foreground w-full block">-</span>
+                            )
+                          ) : column.field === 'email' ? (
+                            account.email ? (
+                              <HighlightedText text={account.email} highlight={searchTerm} />
+                            ) : (
+                              <span className="text-center text-muted-foreground w-full block">-</span>
+                            )
+                          ) : (
+                            account[column.field as keyof Account] ? (
+                              <span title={account[column.field as keyof Account]?.toString()} className="truncate block">{account[column.field as keyof Account]?.toString()}</span>
+                            ) : (
+                              <span className="text-center text-muted-foreground w-full block">-</span>
+                            )
+                          )}
+                      </TableCell>)}
+                    <TableCell className="w-20 px-4 py-3">
+                      <div className="flex items-center justify-center">
+                        <RowActionsDropdown actions={[
+                          {
+                            label: "View",
+                            icon: <Eye className="w-4 h-4" />,
+                            onClick: () => {
+                              setViewingAccount(account);
+                              setShowDetailModal(true);
+                            }
+                          },
                           {
                             label: "Edit",
                             icon: <Edit className="w-4 h-4" />,
@@ -411,16 +659,9 @@ const AccountTable = ({
                             }
                           },
                           {
-                            label: "Send Email",
-                            icon: <Mail className="w-4 h-4" />,
-                            onClick: () => {
-                              setEmailRecipient({
-                                name: account.company_name,
-                                email: account.email,
-                                company_name: account.company_name
-                              });
-                              setEmailModalOpen(true);
-                            }
+                            label: "Create Task",
+                            icon: <CheckSquare className="w-4 h-4" />,
+                            onClick: () => handleCreateTask(account)
                           },
                           {
                             label: "Delete",
@@ -432,36 +673,36 @@ const AccountTable = ({
                             destructive: true,
                             separator: true
                           }
-                        ]}
-                      />
-                    </div>
-                  </TableCell>
-                </TableRow>)}
+                        ]} />
+                      </div>
+                    </TableCell>
+                  </TableRow>)}
             </TableBody>
           </Table>
         </div>
-      </Card>
-
-      {totalPages > 1 && <div className="flex items-center justify-between">
+        
+        {/* Pagination */}
+        <div className="flex items-center justify-between p-4 border-t flex-shrink-0">
           <div className="flex items-center gap-2">
             <span className="text-sm text-muted-foreground">
-              Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredAccounts.length)} of {filteredAccounts.length} accounts
+              Showing {filteredAccounts.length === 0 ? 0 : (currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, filteredAccounts.length)} of {filteredAccounts.length} accounts
             </span>
           </div>
           <div className="flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1}>
+            <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))} disabled={currentPage === 1 || totalPages === 0}>
               <ChevronLeft className="w-4 h-4" />
               Previous
             </Button>
             <span className="text-sm">
-              Page {currentPage} of {totalPages}
+              Page {currentPage} of {totalPages || 1}
             </span>
-            <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages}>
+            <Button variant="outline" size="sm" onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))} disabled={currentPage === totalPages || totalPages === 0}>
               Next
               <ChevronRight className="w-4 h-4" />
             </Button>
           </div>
-        </div>}
+        </div>
+      </Card>
 
       {/* Modals */}
       <AccountModal open={showModal} onOpenChange={open => {
@@ -479,7 +720,19 @@ const AccountTable = ({
       setAccountToDelete(null);
     }} isMultiple={false} count={1} />
 
-      <SendEmailModal open={emailModalOpen} onOpenChange={setEmailModalOpen} recipient={emailRecipient} />
+      <AccountDetailModal open={showDetailModal} onOpenChange={setShowDetailModal} account={viewingAccount} onUpdate={fetchAccounts} onEdit={account => {
+      setShowDetailModal(false);
+      setEditingAccount(account);
+      setShowModal(true);
+    }} />
+
+      <TaskModal
+        open={taskModalOpen}
+        onOpenChange={setTaskModalOpen}
+        onSubmit={createTask}
+        context={taskAccountId ? { module: 'accounts', recordId: taskAccountId, locked: true } : undefined}
+      />
     </div>;
-};
+});
+AccountTable.displayName = "AccountTable";
 export default AccountTable;

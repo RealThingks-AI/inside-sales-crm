@@ -8,10 +8,13 @@ import { ListView } from "@/components/ListView";
 import { DealForm } from "@/components/DealForm";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Plus, LayoutGrid, List } from "lucide-react";
+import { Plus, LayoutGrid, List, Trash2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
 import { useCRUDAudit } from "@/hooks/useCRUDAudit";
-import { DealsSettingsDropdown } from "@/components/DealsSettingsDropdown";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { Upload, Download, Columns, MoreVertical } from "lucide-react";
+import { useDealsImportExport } from "@/hooks/useDealsImportExport";
+import { DeleteConfirmDialog } from "@/components/shared/DeleteConfirmDialog";
 const DealsPage = () => {
   const [searchParams] = useSearchParams();
   const initialStageFilter = searchParams.get('stage') || 'all';
@@ -36,7 +39,14 @@ const DealsPage = () => {
   const [isCreating, setIsCreating] = useState(false);
   const [initialStage, setInitialStage] = useState<DealStage>('Lead');
   const [activeView, setActiveView] = useState<'kanban' | 'list'>('list');
+  const [selectedDealIds, setSelectedDealIds] = useState<string[]>([]);
+  const [showBulkDeleteDialog, setShowBulkDeleteDialog] = useState(false);
   const [stageFilterFromUrl, setStageFilterFromUrl] = useState(initialStageFilter);
+  
+  // Initialize import/export hook at component level
+  const { handleImport, handleExportAll, handleExportSelected } = useDealsImportExport({
+    onRefresh: () => fetchDeals()
+  });
   
   // Get owner parameter from URL - "me" means filter by current user
   const ownerParam = searchParams.get('owner');
@@ -48,6 +58,23 @@ const DealsPage = () => {
       setStageFilterFromUrl(urlStage);
     }
   }, [searchParams]);
+
+  // Handle viewId from URL (from global search)
+  useEffect(() => {
+    const viewId = searchParams.get('viewId');
+    if (viewId && deals.length > 0) {
+      const dealToView = deals.find(d => d.id === viewId);
+      if (dealToView) {
+        setSelectedDeal(dealToView);
+        setIsCreating(false);
+        setIsFormOpen(true);
+        // Clear the viewId from URL after opening
+        const newParams = new URLSearchParams(searchParams);
+        newParams.delete('viewId');
+        navigate(`/deals?${newParams.toString()}`, { replace: true });
+      }
+    }
+  }, [searchParams, deals, navigate]);
 
   // Filter deals by owner when owner=me
   useEffect(() => {
@@ -314,7 +341,10 @@ const DealsPage = () => {
       };
     }
   }, [user]);
-  if (authLoading || loading) {
+  // Show skeleton instead of blocking full-screen loader
+  const showSkeleton = loading && deals.length === 0;
+  
+  if (authLoading) {
     return <div className="h-screen flex items-center justify-center bg-background">
         <div className="text-center">
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
@@ -325,15 +355,34 @@ const DealsPage = () => {
   if (!user) {
     return null;
   }
+  
   return <div className="h-screen flex flex-col bg-background overflow-hidden">
       {/* Fixed Header */}
       <div className="flex-shrink-0 bg-background">
         <div className="px-6 h-16 flex items-center border-b w-full">
           <div className="flex items-center justify-between w-full">
             <div className="min-w-0 flex-1">
-              <h1 className="text-2xl text-foreground font-semibold">Deals</h1>
+              <h1 className="text-xl text-foreground font-semibold">Deals</h1>
             </div>
             <div className="flex items-center gap-3">
+              {/* Bulk action icons when deals are selected */}
+              {selectedDealIds.length > 0 && (
+                <TooltipProvider>
+                  <div className="flex items-center gap-1">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button variant="outline" size="icon" onClick={() => setShowBulkDeleteDialog(true)}>
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>
+                        <p>Delete Selected ({selectedDealIds.length})</p>
+                      </TooltipContent>
+                    </Tooltip>
+                  </div>
+                </TooltipProvider>
+              )}
+
               <div className="bg-muted rounded-md p-0.5 flex gap-0.5">
                 <Button variant={activeView === 'kanban' ? 'secondary' : 'ghost'} size="sm" onClick={() => setActiveView('kanban')} className="gap-1.5 h-8 px-2.5 text-xs">
                   <LayoutGrid className="h-3.5 w-3.5" />
@@ -345,12 +394,59 @@ const DealsPage = () => {
                 </Button>
               </div>
 
-              {/* Settings dropdown between view toggle and Add Deal */}
-              <DealsSettingsDropdown deals={deals} onRefresh={fetchDeals} selectedDeals={[]} showColumns={activeView === 'list'} onColumnCustomize={() => {
-              window.dispatchEvent(new CustomEvent('open-deal-columns'));
-            }} />
+              {/* Actions dropdown - Consistent with Accounts pattern */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" size="sm">
+                    Actions
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="bg-popover border z-50">
+                  {activeView === 'list' && (
+                    <DropdownMenuItem onClick={() => window.dispatchEvent(new CustomEvent('open-deal-columns'))}>
+                      <Columns className="w-4 h-4 mr-2" />
+                      Columns
+                    </DropdownMenuItem>
+                  )}
+                  <DropdownMenuItem onClick={() => {
+                    const input = document.createElement('input');
+                    input.type = 'file';
+                    input.accept = '.csv';
+                    input.onchange = async (e) => {
+                      const file = (e.target as HTMLInputElement).files?.[0];
+                      if (file) {
+                        await handleImport(file);
+                      }
+                    };
+                    input.click();
+                  }}>
+                    <Upload className="w-4 h-4 mr-2" />
+                    Import CSV
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => {
+                    if (selectedDealIds.length > 0) {
+                      handleExportSelected(deals, selectedDealIds);
+                    } else {
+                      handleExportAll(deals);
+                    }
+                  }}>
+                    <Download className="w-4 h-4 mr-2" />
+                    Export {selectedDealIds.length > 0 ? `(${selectedDealIds.length})` : 'CSV'}
+                  </DropdownMenuItem>
+                  {selectedDealIds.length > 0 && (
+                    <DropdownMenuItem 
+                      onClick={() => setShowBulkDeleteDialog(true)}
+                      className="text-destructive focus:text-destructive"
+                    >
+                      <Trash2 className="w-4 h-4 mr-2" />
+                      Delete Selected ({selectedDealIds.length})
+                    </DropdownMenuItem>
+                  )}
+                </DropdownMenuContent>
+              </DropdownMenu>
 
-              <Button variant="outline" size="sm" onClick={() => handleCreateDeal('Lead')}>
+              <Button size="sm" onClick={() => handleCreateDeal('Lead')} className="gap-1.5">
+                <Plus className="h-4 w-4" />
                 Add Deal
               </Button>
             </div>
@@ -359,12 +455,51 @@ const DealsPage = () => {
       </div>
 
       {/* Main Content Area - Takes remaining height */}
-      <div className="flex-1 min-h-0 overflow-hidden">
-        {activeView === 'kanban' ? <KanbanBoard deals={filteredDeals} onUpdateDeal={handleUpdateDeal} onDealClick={handleDealClick} onCreateDeal={handleCreateDeal} onDeleteDeals={handleDeleteDeals} onImportDeals={handleImportDeals} onRefresh={fetchDeals} /> : <ListView deals={filteredDeals} onDealClick={handleDealClick} onUpdateDeal={handleUpdateDeal} onDeleteDeals={handleDeleteDeals} onImportDeals={handleImportDeals} initialStageFilter={stageFilterFromUrl} />}
+      <div className="flex-1 min-h-0 flex flex-col px-4 pt-2 pb-4 overflow-hidden">
+        {showSkeleton ? (
+          <div className="space-y-4 flex-1">
+            <div className="h-10 bg-muted animate-pulse rounded" />
+            <div className="h-64 bg-muted animate-pulse rounded" />
+          </div>
+        ) : activeView === 'kanban' ? (
+          <KanbanBoard 
+            deals={filteredDeals} 
+            onUpdateDeal={handleUpdateDeal} 
+            onDealClick={handleDealClick} 
+            onCreateDeal={handleCreateDeal} 
+            onDeleteDeals={handleDeleteDeals} 
+            onImportDeals={handleImportDeals} 
+            onRefresh={fetchDeals} 
+          />
+        ) : (
+          <ListView 
+            deals={filteredDeals} 
+            onDealClick={handleDealClick} 
+            onUpdateDeal={handleUpdateDeal} 
+            onDeleteDeals={handleDeleteDeals} 
+            onImportDeals={handleImportDeals} 
+            initialStageFilter={stageFilterFromUrl}
+            onSelectionChange={setSelectedDealIds}
+          />
+        )}
       </div>
 
       {/* Deal Form Modal */}
       <DealForm deal={selectedDeal} isOpen={isFormOpen} onClose={handleCloseForm} onSave={handleSaveDeal} onRefresh={fetchDeals} isCreating={isCreating} initialStage={initialStage} />
+
+      {/* Bulk Delete Confirmation Dialog */}
+      <DeleteConfirmDialog
+        open={showBulkDeleteDialog}
+        onOpenChange={setShowBulkDeleteDialog}
+        onConfirm={() => {
+          handleDeleteDeals(selectedDealIds);
+          setSelectedDealIds([]);
+          setShowBulkDeleteDialog(false);
+        }}
+        title="Delete Deals"
+        itemName={`${selectedDealIds.length} deal${selectedDealIds.length > 1 ? 's' : ''}`}
+        itemType="deals"
+      />
     </div>;
 };
 export default DealsPage;

@@ -8,20 +8,56 @@ import { useAuth } from "@/hooks/useAuth";
 import SecurityEnhancedApp from "@/components/SecurityEnhancedApp";
 import { AppSidebar } from "@/components/AppSidebar";
 import PageAccessGuard from "@/components/PageAccessGuard";
-import Dashboard from "./pages/Dashboard";
-import Accounts from "./pages/Accounts";
-import Contacts from "./pages/Contacts";
-import Leads from "./pages/Leads";
-import Meetings from "./pages/Meetings";
-import DealsPage from "./pages/DealsPage";
-import Settings from "./pages/Settings";
-import Auth from "./pages/Auth";
-import NotFound from "./pages/NotFound";
-import Notifications from "./pages/Notifications";
-import Tasks from "./pages/Tasks";
-import { useState } from "react";
+import { useState, lazy, Suspense } from "react";
+import { Skeleton } from "@/components/ui/skeleton";
 
-const queryClient = new QueryClient();
+// Lazy load all page components for code-splitting
+const Dashboard = lazy(() => import("./pages/Dashboard"));
+const Accounts = lazy(() => import("./pages/Accounts"));
+const Contacts = lazy(() => import("./pages/Contacts"));
+const Leads = lazy(() => import("./pages/Leads"));
+const Meetings = lazy(() => import("./pages/Meetings"));
+const DealsPage = lazy(() => import("./pages/DealsPage"));
+const Settings = lazy(() => import("./pages/Settings"));
+const Auth = lazy(() => import("./pages/Auth"));
+const NotFound = lazy(() => import("./pages/NotFound"));
+const Notifications = lazy(() => import("./pages/Notifications"));
+const Tasks = lazy(() => import("./pages/Tasks"));
+const StickyHeaderTest = lazy(() => import("./pages/StickyHeaderTest"));
+
+// QueryClient with optimized defaults to reduce refetching
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 30 * 1000, // 30 seconds - data stays fresh, no refetch on mount
+      gcTime: 10 * 60 * 1000, // 10 minutes cache
+      refetchOnWindowFocus: false, // Don't refetch when user switches tabs
+      retry: 1, // Reduce retries to avoid long waits
+    },
+  },
+});
+
+// Loading fallback for auth page (full screen)
+const PageLoader = () => (
+  <div className="min-h-screen flex items-center justify-center bg-background">
+    <div className="text-center">
+      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+      <p className="text-muted-foreground">Loading...</p>
+    </div>
+  </div>
+);
+
+// Lightweight content loader - shows skeleton in content area only
+const ContentLoader = () => (
+  <div className="h-screen flex flex-col bg-background p-6">
+    <Skeleton className="h-8 w-48 mb-6" />
+    <div className="space-y-4 flex-1">
+      <Skeleton className="h-12 w-full" />
+      <Skeleton className="h-64 w-full" />
+      <Skeleton className="h-32 w-full" />
+    </div>
+  </div>
+);
 
 // Layout Component for all pages with fixed sidebar
 const FixedSidebarLayout = ({ children }: { children: React.ReactNode }) => {
@@ -35,9 +71,9 @@ const FixedSidebarLayout = ({ children }: { children: React.ReactNode }) => {
       <main 
         className="flex-1 bg-background min-h-screen"
         style={{ 
-          marginLeft: sidebarOpen ? '200px' : '64px',
+          marginLeft: sidebarOpen ? '12.5rem' : '4rem',
           transition: 'margin-left 300ms ease-in-out',
-          width: `calc(100vw - ${sidebarOpen ? '200px' : '64px'})`
+          width: `calc(100vw - ${sidebarOpen ? '12.5rem' : '4rem'})`
         }}
       >
         <div className="w-full h-full overflow-auto">
@@ -68,10 +104,13 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   }
 
   // Use FixedSidebarLayout for all protected routes with Page Access Guard
+  // Suspense is inside layout so sidebar stays visible while content loads
   return (
     <FixedSidebarLayout>
       <PageAccessGuard>
-        {children}
+        <Suspense fallback={<ContentLoader />}>
+          {children}
+        </Suspense>
       </PageAccessGuard>
     </FixedSidebarLayout>
   );
@@ -99,14 +138,22 @@ const AuthRoute = ({ children }: { children: React.ReactNode }) => {
   return <>{children}</>;
 };
 
-// App Router Component - inside the auth context
+// App Router Component - Suspense moved inside ProtectedRoute for instant sidebar
 const AppRouter = () => (
   <BrowserRouter>
     <Routes>
+      {/* Public test route for sticky header verification */}
+      <Route path="/sticky-header-test" element={
+        <Suspense fallback={<PageLoader />}>
+          <StickyHeaderTest />
+        </Suspense>
+      } />
       <Route path="/auth" element={
-        <AuthRoute>
-          <Auth />
-        </AuthRoute>
+        <Suspense fallback={<PageLoader />}>
+          <AuthRoute>
+            <Auth />
+          </AuthRoute>
+        </Suspense>
       } />
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
       <Route path="/dashboard" element={

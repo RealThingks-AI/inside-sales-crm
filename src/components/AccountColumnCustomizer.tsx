@@ -29,10 +29,13 @@ export const defaultAccountColumns: AccountColumnConfig[] = [
   { field: 'tags', label: 'Tags', visible: true, order: 4 },
   { field: 'country', label: 'Country', visible: true, order: 5 },
   { field: 'status', label: 'Status', visible: true, order: 6 },
-  { field: 'website', label: 'Website', visible: true, order: 7 },
+  { field: 'website', label: 'Website', visible: false, order: 7 },
   { field: 'region', label: 'Region', visible: false, order: 8 },
   { field: 'phone', label: 'Phone', visible: false, order: 9 },
   { field: 'account_owner', label: 'Account Owner', visible: true, order: 10 },
+  { field: 'deal_count', label: 'Deals', visible: false, order: 11 },
+  { field: 'contact_count', label: 'Contacts', visible: false, order: 12 },
+  { field: 'lead_count', label: 'Leads', visible: false, order: 13 },
 ];
 
 export const AccountColumnCustomizer = ({
@@ -43,12 +46,26 @@ export const AccountColumnCustomizer = ({
   onSave,
   isSaving = false,
 }: AccountColumnCustomizerProps) => {
-  const [localColumns, setLocalColumns] = useState<AccountColumnConfig[]>(columns);
+  const [localColumns, setLocalColumns] = useState<AccountColumnConfig[]>(() => {
+    const existingFields = new Set(columns.map(c => c.field));
+    const missingColumns = defaultAccountColumns.filter(dc => !existingFields.has(dc.field));
+    const validColumns = columns.filter(c => 
+      defaultAccountColumns.some(dc => dc.field === c.field)
+    );
+    return [...validColumns, ...missingColumns];
+  });
 
-  // Sync local columns when props change
+  // Only sync when dialog opens (not on every columns prop change)
   useEffect(() => {
-    setLocalColumns(columns);
-  }, [columns]);
+    if (open) {
+      const existingFields = new Set(columns.map(c => c.field));
+      const missingColumns = defaultAccountColumns.filter(dc => !existingFields.has(dc.field));
+      const validColumns = columns.filter(c => 
+        defaultAccountColumns.some(dc => dc.field === c.field)
+      );
+      setLocalColumns([...validColumns, ...missingColumns]);
+    }
+  }, [open]);
 
   const handleToggleColumn = (field: string, visible: boolean) => {
     const updated = localColumns.map(col =>
