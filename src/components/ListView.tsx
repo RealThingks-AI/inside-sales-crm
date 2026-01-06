@@ -633,9 +633,6 @@ export const ListView = ({
                 >
                   <div className="flex items-center justify-center gap-2 pr-4 text-foreground font-bold">
                     {column.label}
-                    {sortBy === column.field && (
-                      sortOrder === "asc" ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />
-                    )}
                   </div>
                   <div
                     className="absolute right-0 top-0 w-1 h-full cursor-col-resize hover:bg-primary/40 bg-transparent"

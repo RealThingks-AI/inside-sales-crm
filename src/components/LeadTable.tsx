@@ -309,10 +309,7 @@ const LeadTable = forwardRef<LeadTableRef, LeadTableProps>(({
   };
 
   const getSortIcon = (field: string) => {
-    if (sortField !== field) {
-      return <ArrowUpDown className="w-4 h-4 opacity-0 group-hover:opacity-100 transition-opacity" />;
-    }
-    return sortDirection === 'asc' ? <ArrowUp className="w-4 h-4" /> : <ArrowDown className="w-4 h-4" />;
+    return null; // Hide sort icons but keep sorting on click
   };
 
   const fetchLeads = async () => {
