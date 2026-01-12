@@ -37,52 +37,77 @@ async function getAccessToken(): Promise<string> {
   return data.access_token;
 }
 
+// Improved NDR parsing for Office 365 format
 function parseNDRContent(subject: string, body: string): { recipientEmail: string | null; reason: string | null; originalSubject: string | null } {
   let recipientEmail: string | null = null;
   let reason: string | null = null;
   let originalSubject: string | null = null;
 
+  console.log("Parsing NDR - Subject:", subject);
+  console.log("Parsing NDR - Body preview:", body.substring(0, 500));
+
   // Extract original subject from NDR subject line
-  const subjectMatch = subject.match(/Undeliverable:\s*(.+)/i);
+  const subjectMatch = subject.match(/Undeliverable:\s*(.+)/i) || subject.match(/Delivery Status Notification.*?:\s*(.+)/i);
   if (subjectMatch) {
     originalSubject = subjectMatch[1].trim();
   }
 
-  // Extract recipient email from body
+  // Improved email extraction patterns for Office 365 NDRs
   const emailPatterns = [
+    // Office 365: "Your message to xxx@domain.com couldn't be delivered"
+    /Your message to\s+<?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>?\s+couldn['']t be delivered/i,
+    // Office 365: "message to xxx@domain.com couldn't be delivered"
+    /message to\s+<?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>?\s+couldn['']t be delivered/i,
+    // "couldn't deliver to xxx@domain.com"
+    /couldn['']t deliver to\s+<?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>?/i,
+    // Standard: "To: xxx@domain.com"
     /(?:To|Recipient|Address):\s*<?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>?/i,
-    /couldn't be delivered to\s+<?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>?/i,
-    /delivery.*failed.*<?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>?/i,
+    // "delivery to xxx@domain.com failed"
+    /delivery to\s+<?([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>?\s+(?:failed|unsuccessful)/i,
+    // Fallback: any email in angle brackets
     /<([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})>/,
+    // Fallback: any email pattern
+    /\b([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,})\b/,
   ];
 
   for (const pattern of emailPatterns) {
     const match = body.match(pattern);
     if (match) {
       recipientEmail = match[1].toLowerCase();
+      console.log(`Found recipient email using pattern: ${pattern} -> ${recipientEmail}`);
       break;
     }
   }
 
-  // Extract bounce reason
+  // Extract bounce reason - Office 365 specific patterns
   const reasonPatterns = [
+    // Office 365: "xxx wasn't found at domain.com"
+    /([a-zA-Z0-9._%+-]+)\s+wasn['']t found at\s+([a-zA-Z0-9.-]+\.[a-zA-Z]{2,})/i,
+    // "The email address couldn't be found"
+    /(The email address couldn['']t be found[^.]*)/i,
+    // "mailbox unavailable"
+    /(mailbox\s+(?:unavailable|not found|full|disabled)[^.]*)/i,
+    // "user unknown"
+    /(user\s+(?:unknown|doesn['']t exist|not found)[^.]*)/i,
+    // Error codes
     /(?:Remote Server returned|Diagnostic information).*?['"]?(\d{3}\s+\d\.\d\.\d+[^'"]*?)['"]?(?:\s|$)/i,
     /(550\s+\d\.\d\.\d+[^\n]*)/i,
-    /(mailbox.*(?:not found|unavailable|full|disabled))/i,
-    /(user.*(?:unknown|doesn't exist|not found))/i,
-    /(address rejected)/i,
-    /(permanent failure)/i,
+    // General failure
+    /(address rejected[^.]*)/i,
+    /(permanent failure[^.]*)/i,
+    /(Unknown To address[^.]*)/i,
   ];
 
   for (const pattern of reasonPatterns) {
     const match = body.match(pattern);
     if (match) {
-      reason = match[1].trim().substring(0, 500);
+      reason = match[0].trim().substring(0, 500);
+      console.log(`Found bounce reason: ${reason}`);
       break;
     }
   }
 
-  if (!reason && (subject.toLowerCase().includes('undeliverable') || subject.toLowerCase().includes('failure'))) {
+  if (!reason && (subject.toLowerCase().includes('undeliverable') || subject.toLowerCase().includes('failure') || subject.toLowerCase().includes('delivery status'))) {
     reason = 'Email could not be delivered';
   }
 
@@ -98,31 +123,66 @@ async function checkBounceForEmail(
   sentAt: string
 ): Promise<boolean> {
   try {
-    // Search for NDR messages in the sender's mailbox for this specific recipient
+    // Search for NDR messages in the sender's mailbox
+    // Use a simpler filter to avoid OData syntax issues
     const searchDate = new Date(new Date(sentAt).getTime() - 60000).toISOString(); // 1 min before send
-    const searchUrl = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(senderEmail)}/messages?$filter=receivedDateTime ge ${searchDate} and (contains(subject,'Undeliverable') or contains(subject,'Delivery Status') or from/emailAddress/address eq 'postmaster@outlook.com')&$select=id,subject,body,receivedDateTime&$top=20`;
+    
+    // Simplified filter - just get recent messages and filter in code
+    const searchUrl = `https://graph.microsoft.com/v1.0/users/${encodeURIComponent(senderEmail)}/messages?$filter=receivedDateTime ge ${searchDate}&$select=id,subject,body,from,receivedDateTime&$top=100&$orderby=receivedDateTime desc`;
+
+    console.log(`Checking bounces for ${recipientEmail} from ${senderEmail}...`);
 
     const messagesResponse = await fetch(searchUrl, {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
 
     if (!messagesResponse.ok) {
-      console.log(`Could not fetch messages for ${senderEmail}: ${messagesResponse.status}`);
+      const errorText = await messagesResponse.text();
+      console.error(`Failed to fetch messages for ${senderEmail}: ${messagesResponse.status} - ${errorText}`);
+      
+      // If 403, log that we need Mail.Read application permission
+      if (messagesResponse.status === 403) {
+        console.error("PERMISSION ERROR: The Azure app needs 'Mail.Read' APPLICATION permission (not delegated) in Azure AD > App registrations > API permissions. Also ensure admin consent is granted.");
+      }
+      
       return false;
     }
 
     const messagesData = await messagesResponse.json();
-    const ndrMessages = messagesData.value || [];
+    const allMessages = messagesData.value || [];
+    
+    // Filter for NDR messages in code (since OData filter was causing issues)
+    const ndrKeywords = ['undeliverable', 'delivery status', 'delivery failed', 'delivery failure', 'non-delivery', 'returned mail', 'mail delivery'];
+    const ndrSenders = ['postmaster', 'mailer-daemon', 'microsoft outlook'];
+    
+    const ndrMessages = allMessages.filter((msg: any) => {
+      const subject = (msg.subject || '').toLowerCase();
+      const fromAddress = (msg.from?.emailAddress?.address || '').toLowerCase();
+      const fromName = (msg.from?.emailAddress?.name || '').toLowerCase();
+      
+      const isNDRSubject = ndrKeywords.some(keyword => subject.includes(keyword));
+      const isNDRSender = ndrSenders.some(sender => fromAddress.includes(sender) || fromName.includes(sender));
+      
+      return isNDRSubject || isNDRSender;
+    });
+
+    console.log(`Found ${allMessages.length} messages, ${ndrMessages.length} are NDRs for ${senderEmail}`);
 
     for (const ndr of ndrMessages) {
+      const fromInfo = ndr.from?.emailAddress?.address || 'unknown';
+      console.log(`Checking NDR: "${ndr.subject}" from ${fromInfo}`);
+      
+      const bodyContent = ndr.body?.content || '';
       const { recipientEmail: ndrRecipient, reason } = parseNDRContent(
         ndr.subject || '',
-        ndr.body?.content || ''
+        bodyContent
       );
+
+      console.log(`Parsed NDR - recipient: ${ndrRecipient}, looking for: ${recipientEmail}`);
 
       // Check if this NDR is for our target recipient
       if (ndrRecipient && ndrRecipient.toLowerCase() === recipientEmail.toLowerCase()) {
-        console.log(`Found bounce for ${recipientEmail}: ${reason}`);
+        console.log(`✅ MATCH! Found bounce for ${recipientEmail}: ${reason}`);
         
         // Update the email history record
         const { error } = await supabase
@@ -141,12 +201,15 @@ async function checkBounceForEmail(
 
         if (error) {
           console.error(`Failed to update email ${emailHistoryId}:`, error);
+        } else {
+          console.log(`Successfully marked email ${emailHistoryId} as bounced`);
         }
         
         return true;
       }
     }
 
+    console.log(`No bounce found for ${recipientEmail}`);
     return false;
   } catch (error) {
     console.error(`Error checking bounce for ${recipientEmail}:`, error);
@@ -160,7 +223,9 @@ serve(async (req: Request) => {
   }
 
   const startTime = Date.now();
+  console.log("=".repeat(50));
   console.log("Starting bounce check process...");
+  console.log("=".repeat(50));
 
   try {
     const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
@@ -170,12 +235,14 @@ serve(async (req: Request) => {
     let accessToken: string;
     try {
       accessToken = await getAccessToken();
+      console.log("Successfully obtained Azure access token");
     } catch (tokenError) {
       console.error("Failed to get access token:", tokenError);
       return new Response(JSON.stringify({ 
         success: false, 
         error: "Azure authentication failed",
-        details: tokenError instanceof Error ? tokenError.message : "Unknown error"
+        details: tokenError instanceof Error ? tokenError.message : "Unknown error",
+        hint: "Ensure AZURE_EMAIL_TENANT_ID, AZURE_EMAIL_CLIENT_ID, and AZURE_EMAIL_CLIENT_SECRET are set correctly"
       }), {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },
@@ -215,10 +282,13 @@ serve(async (req: Request) => {
         // Skip if email is already bounced
         const emailHistory = check.email_history as any;
         if (!emailHistory || emailHistory.status === 'bounced') {
+          console.log(`Skipping ${check.recipient_email} - already processed or not found`);
           processedIds.push(check.id);
           continue;
         }
 
+        console.log(`Checking pending bounce for: ${check.recipient_email}`);
+        
         const bounced = await checkBounceForEmail(
           supabase,
           accessToken,
@@ -241,16 +311,19 @@ serve(async (req: Request) => {
           .from('pending_bounce_checks')
           .update({ 
             checked: true,
-            check_result: 'processed'
+            check_result: pendingBouncesFound > 0 ? 'bounced' : 'ok'
           })
           .in('id', processedIds);
       }
+    } else {
+      console.log("No pending bounce checks to process");
     }
 
-    // 2. Also run general sync for recent emails (last 6 hours)
+    // 2. Also run general sync for recent emails (last 24 hours to catch delayed bounces)
+    console.log("-".repeat(50));
     console.log("Running general bounce sync for recent emails...");
     
-    const sinceHours = 6;
+    const sinceHours = 24; // Extended to 24 hours
     const sinceDate = new Date(Date.now() - sinceHours * 60 * 60 * 1000).toISOString();
     
     // Get unique sender emails from recent, non-bounced emails
@@ -259,15 +332,20 @@ serve(async (req: Request) => {
       .select('sender_email, recipient_email, id, sent_at')
       .gte('sent_at', sinceDate)
       .not('status', 'eq', 'bounced')
+      .order('sent_at', { ascending: false })
       .limit(100);
 
     let generalBouncesFound = 0;
 
     if (recentEmails && recentEmails.length > 0) {
+      console.log(`Found ${recentEmails.length} recent emails to check for bounces`);
+      
       const senderEmails = [...new Set(recentEmails.map(e => e.sender_email))];
+      console.log(`Unique senders to check: ${senderEmails.join(', ')}`);
       
       for (const senderEmail of senderEmails) {
         const senderRecentEmails = recentEmails.filter(e => e.sender_email === senderEmail);
+        console.log(`Checking ${senderRecentEmails.length} emails for sender ${senderEmail}`);
         
         for (const email of senderRecentEmails) {
           const bounced = await checkBounceForEmail(
@@ -284,6 +362,8 @@ serve(async (req: Request) => {
           }
         }
       }
+    } else {
+      console.log("No recent emails to check");
     }
 
     // 3. Clean up old pending checks (older than 7 days)
@@ -295,7 +375,9 @@ serve(async (req: Request) => {
     const totalBouncesFound = pendingBouncesFound + generalBouncesFound;
     const processingTime = Date.now() - startTime;
 
+    console.log("=".repeat(50));
     console.log(`Bounce check complete in ${processingTime}ms. Found ${totalBouncesFound} bounce(s).`);
+    console.log("=".repeat(50));
 
     return new Response(JSON.stringify({
       success: true,
@@ -307,6 +389,9 @@ serve(async (req: Request) => {
       message: totalBouncesFound > 0 
         ? `Found and marked ${totalBouncesFound} bounced email(s)` 
         : 'No new bounces detected',
+      hint: totalBouncesFound === 0 
+        ? "If bounces exist but weren't detected, ensure the Azure app has 'Mail.Read' APPLICATION permission with admin consent"
+        : undefined
     }), {
       headers: { ...corsHeaders, "Content-Type": "application/json" },
     });
