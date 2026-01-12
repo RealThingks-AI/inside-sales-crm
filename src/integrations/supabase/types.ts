@@ -1657,6 +1657,47 @@ export type Database = {
         }
         Relationships: []
       }
+      pending_bounce_checks: {
+        Row: {
+          check_after: string
+          check_result: string | null
+          checked: boolean | null
+          created_at: string | null
+          email_history_id: string | null
+          id: string
+          recipient_email: string
+          sender_email: string
+        }
+        Insert: {
+          check_after: string
+          check_result?: string | null
+          checked?: boolean | null
+          created_at?: string | null
+          email_history_id?: string | null
+          id?: string
+          recipient_email: string
+          sender_email: string
+        }
+        Update: {
+          check_after?: string
+          check_result?: string | null
+          checked?: boolean | null
+          created_at?: string | null
+          email_history_id?: string | null
+          id?: string
+          recipient_email?: string
+          sender_email?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "pending_bounce_checks_email_history_id_fkey"
+            columns: ["email_history_id"]
+            isOneToOne: false
+            referencedRelation: "email_history"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       pipeline_stages: {
         Row: {
           created_at: string
