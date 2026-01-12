@@ -58,6 +58,43 @@ const EmailHistorySettings = () => {
     fetchEmailHistory();
   }, [user]);
 
+  // Real-time subscription for bounce detection
+  useEffect(() => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('email-bounce-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'email_history',
+        },
+        (payload) => {
+          const newRecord = payload.new as EmailHistoryRecord;
+          const oldRecord = payload.old as Partial<EmailHistoryRecord>;
+          
+          // Check if status changed to bounced
+          if (newRecord.status === 'bounced' && oldRecord.status !== 'bounced') {
+            toast({
+              title: "Bounce Detected",
+              description: `Email to ${newRecord.recipient_email} has bounced.`,
+              variant: "destructive",
+            });
+            
+            // Refresh the list to show updated status
+            fetchEmailHistory();
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user, toast]);
+
   // Reset to page 1 when filters change
   useEffect(() => {
     setCurrentPage(1);
@@ -468,8 +505,12 @@ const EmailHistorySettings = () => {
                   {isSyncingBounces ? 'Syncing...' : 'Sync Bounces'}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent>
-                <p>Check mailbox for bounce notifications (NDRs)</p>
+              <TooltipContent className="max-w-[250px]">
+                <p className="font-medium">Auto-detection enabled</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  Bounces are checked automatically ~45 seconds after each email is sent.
+                  Click to manually check for any missed bounces.
+                </p>
               </TooltipContent>
             </Tooltip>
           </TooltipProvider>

@@ -307,6 +307,23 @@ const handler = async (req: Request): Promise<Response> => {
 
     console.log(`Email marked as sent for record: ${emailRecord.id}`);
 
+    // Queue a bounce check for 45 seconds from now (auto bounce detection)
+    const checkAfter = new Date(Date.now() + 45000).toISOString();
+    const { error: queueError } = await supabase
+      .from("pending_bounce_checks")
+      .insert({
+        email_history_id: emailRecord.id,
+        sender_email: from,
+        recipient_email: to,
+        check_after: checkAfter,
+      });
+
+    if (queueError) {
+      console.warn("Failed to queue bounce check:", queueError);
+    } else {
+      console.log(`Queued bounce check for ${to} at ${checkAfter}`);
+    }
+
     return new Response(
       JSON.stringify({ 
         success: true, 
