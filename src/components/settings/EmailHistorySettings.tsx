@@ -125,8 +125,9 @@ const EmailHistorySettings = () => {
     try {
       const { data: { session } } = await supabase.auth.getSession();
       
-      const { data, error } = await supabase.functions.invoke('sync-email-bounces', {
-        body: { sinceHours: 72 },
+      // Use the improved process-bounce-checks function
+      const { data, error } = await supabase.functions.invoke('process-bounce-checks', {
+        body: {},
         headers: {
           Authorization: `Bearer ${session?.access_token}`,
         },
@@ -134,10 +135,18 @@ const EmailHistorySettings = () => {
 
       if (error) throw error;
 
-      toast({
-        title: "Bounce Sync Complete",
-        description: data.message || `Found ${data.bouncesFound || 0} bounced email(s)`,
-      });
+      if (data.hint && data.totalBouncesFound === 0) {
+        toast({
+          title: "Bounce Check Complete",
+          description: data.hint,
+          variant: "default",
+        });
+      } else {
+        toast({
+          title: "Bounce Check Complete",
+          description: data.message || `Found ${data.totalBouncesFound || 0} bounced email(s)`,
+        });
+      }
 
       // Refresh the list
       fetchEmailHistory();
@@ -145,7 +154,7 @@ const EmailHistorySettings = () => {
       console.error('Error syncing bounces:', error);
       toast({
         title: "Sync Failed",
-        description: error.message || "Failed to sync bounces. Check Azure email permissions.",
+        description: error.message || "Failed to check bounces. Ensure Azure app has 'Mail.Read' application permission.",
         variant: "destructive",
       });
     } finally {
@@ -505,11 +514,13 @@ const EmailHistorySettings = () => {
                   {isSyncingBounces ? 'Syncing...' : 'Sync Bounces'}
                 </Button>
               </TooltipTrigger>
-              <TooltipContent className="max-w-[250px]">
-                <p className="font-medium">Auto-detection enabled</p>
+              <TooltipContent className="max-w-[300px]">
+                <p className="font-medium">Bounce Detection</p>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Bounces are checked automatically ~45 seconds after each email is sent.
-                  Click to manually check for any missed bounces.
+                  Checks Office 365 mailbox for bounce-back emails (NDRs).
+                </p>
+                <p className="text-xs text-orange-500 mt-1 font-medium">
+                  ⚠️ Requires Azure AD app to have "Mail.Read" APPLICATION permission with admin consent.
                 </p>
               </TooltipContent>
             </Tooltip>
