@@ -523,21 +523,27 @@ export function useCampaignAggregates() {
   const query = useQuery({
     queryKey: ['campaign_aggregates'],
     queryFn: async () => {
-      // Fetch all pages without row limit by removing .limit()
-      const [accountsRes, contactsRes, dealsRes] = await Promise.all([
-        supabase.from('campaign_accounts').select('campaign_id'),
-        supabase.from('campaign_contacts').select('campaign_id'),
-        supabase.from('deals').select('campaign_id').not('campaign_id', 'is', null),
-      ]);
+      // First get all campaign IDs
+      const { data: campaigns } = await supabase.from('campaigns').select('id');
+      if (!campaigns?.length) return {};
 
       const counts: Record<string, { accounts: number; contacts: number; deals: number }> = {};
-      const ensure = (id: string) => {
-        if (!counts[id]) counts[id] = { accounts: 0, contacts: 0, deals: 0 };
-      };
 
-      (accountsRes.data || []).forEach((r: any) => { ensure(r.campaign_id); counts[r.campaign_id].accounts++; });
-      (contactsRes.data || []).forEach((r: any) => { ensure(r.campaign_id); counts[r.campaign_id].contacts++; });
-      (dealsRes.data || []).forEach((r: any) => { ensure(r.campaign_id); counts[r.campaign_id].deals++; });
+      // Use count queries per campaign to avoid 1000-row limit
+      await Promise.all(
+        campaigns.map(async (c: any) => {
+          const [accRes, conRes, dealRes] = await Promise.all([
+            supabase.from('campaign_accounts').select('id', { count: 'exact', head: true }).eq('campaign_id', c.id),
+            supabase.from('campaign_contacts').select('id', { count: 'exact', head: true }).eq('campaign_id', c.id),
+            supabase.from('deals').select('id', { count: 'exact', head: true }).eq('campaign_id', c.id),
+          ]);
+          counts[c.id] = {
+            accounts: accRes.count ?? 0,
+            contacts: conRes.count ?? 0,
+            deals: dealRes.count ?? 0,
+          };
+        })
+      );
 
       return counts;
     },

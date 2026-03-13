@@ -6,9 +6,9 @@ const corsHeaders = {
 };
 
 async function getGraphAccessToken(): Promise<string> {
-  const tenantId = Deno.env.get('AZURE_TENANT_ID')!;
-  const clientId = Deno.env.get('AZURE_CLIENT_ID')!;
-  const clientSecret = Deno.env.get('AZURE_CLIENT_SECRET')!;
+  const tenantId = Deno.env.get('AZURE_EMAIL_TENANT_ID')!;
+  const clientId = Deno.env.get('AZURE_EMAIL_CLIENT_ID')!;
+  const clientSecret = Deno.env.get('AZURE_EMAIL_CLIENT_SECRET')!;
 
   const tokenUrl = `https://login.microsoftonline.com/${tenantId}/oauth2/v2.0/token`;
   const params = new URLSearchParams({
@@ -51,11 +51,11 @@ Deno.serve(async (req) => {
     });
 
     const token = authHeader.replace('Bearer ', '');
-    const { data: userData, error: userError } = await supabase.auth.getUser(token);
-    if (userError || !userData?.user) {
+    const { data: claimsData, error: claimsError } = await supabase.auth.getClaims(token);
+    if (claimsError || !claimsData?.claims) {
       return new Response(JSON.stringify({ error: 'Unauthorized' }), { status: 401, headers: corsHeaders });
     }
-    const userId = userData.user.id;
+    const userId = claimsData.claims.sub;
 
     const { recipientEmail, recipientName, subject, body, contactId, accountId, campaignId } = await req.json();
 
